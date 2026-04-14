@@ -19,4 +19,8 @@ app.get('/health', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Server Saúde Brasil 360 running on port ${PORT}`);
+
+  // Iniciar Jobs Agendados
+  const { startFNSJob } = require('./jobs/syncFNS');
+  startFNSJob();
 });

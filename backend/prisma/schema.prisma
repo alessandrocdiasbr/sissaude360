@@ -8,9 +8,57 @@ generator client {
 }
 
 model Unidade {
-  id        String     @id @default(uuid())
-  nome      String     @unique
-  producoes Producao[]
+  id          String     @id @default(uuid())
+  nome        String     @unique
+  tipo        String     @default("UBS")
+  endereco    String?
+  telefone    String?
+  producoes   Producao[]
+  estoques    Estoque[]
+  servidores  Servidor[]
+}
+
+model Servidor {
+  id                String   @id @default(uuid())
+  nome              String
+  telefone          String?
+  email             String?
+  funcao            String
+  formaContratacao  String   // Concurso, Processo Seletivo, Contrato Temporário, Comissão
+  unidadeId         String
+  unidade           Unidade  @relation(fields: [unidadeId], references: [id])
+}
+
+model Item {
+  id             String         @id @default(uuid())
+  nome           String
+  descricao      String?
+  categoria      String         // Papelaria, Curativo, Instrumental, etc.
+  unidadeMedida  String         // Unidade, Frasco, Caixa, etc.
+  estoques       Estoque[]
+  movimentacoes  Movimentacao[]
+}
+
+model Estoque {
+  id         String   @id @default(uuid())
+  itemId     String
+  unidadeId  String?  // Null se for Almoxarifado Central
+  quantidade Float    @default(0)
+  item       Item     @relation(fields: [itemId], references: [id])
+  unidade    Unidade? @relation(fields: [unidadeId], references: [id])
+
+  @@unique([itemId, unidadeId])
+}
+
+model Movimentacao {
+  id             String   @id @default(uuid())
+  itemId         String
+  unidadeId      String?
+  tipo           String   // ENTRADA, SAIDA, TRANSFERENCIA
+  quantidade     Float
+  data           DateTime @default(now())
+  observacao     String?
+  item           Item     @relation(fields: [itemId], references: [id])
 }
 
 model Indicador {
