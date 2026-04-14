@@ -1,0 +1,47 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Unidade {
+  id        String     @id @default(uuid())
+  nome      String     @unique
+  producoes Producao[]
+}
+
+model Indicador {
+  id          String     @id @default(uuid())
+  nome        String     @unique
+  peso        Float?     @default(1.0)
+  categoria   String?
+  metaRegular Float      @default(30)
+  metaBom     Float      @default(60)
+  metaOtimo   Float      @default(90)
+  producoes   Producao[]
+}
+
+model Producao {
+  id           String    @id @default(uuid())
+  unidadeId    String
+  indicadorId  String
+  mes          Int
+  ano          Int
+  numerador    Float
+  denominador  Float
+  pontuacao    Float     // (numerador / denominador) * 100
+  unidade      Unidade   @relation(fields: [unidadeId], references: [id])
+  indicador    Indicador @relation(fields: [indicadorId], references: [id])
+
+  @@unique([unidadeId, indicadorId, mes, ano])
+}
+
+model Usuario {
+  id       String @id @default(uuid())
+  nome     String
+  email    String @unique
+  senha    String
+}
