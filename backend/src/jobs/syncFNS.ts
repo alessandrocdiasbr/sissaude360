@@ -1,14 +1,18 @@
-const cron = require('node-cron');
-const fnsService = require('../modules/fns/fns.service');
-const repository = require('../modules/fns/fns.repository');
+import cron from 'node-cron';
+import fnsService from '../modules/fns/fns.service';
+import repository from '../modules/fns/fns.repository';
 
-const MUNICIPIO_PADRAO_IBGE = '310620'; // Exemplo para o município
+const MUNICIPIO_IBGE = process.env.MUNICIPIO_IBGE_PADRAO;
 
-const startFNSJob = () => {
+export const startFNSJob = () => {
     // Rodar todo dia às 02:00 da manhã
     cron.schedule('0 2 * * *', async () => {
         const startTime = Date.now();
         console.log(`[${new Date().toISOString()}] Iniciando Sincronização FNS...`);
+
+        if (!MUNICIPIO_IBGE) {
+            console.warn(`[${new Date().toISOString()}] [FNS Job] MUNICIPIO_IBGE_PADRAO não definido. Sincronização de transferências ignorada.`);
+        }
 
         try {
             const agora = new Date();
@@ -29,7 +33,7 @@ const startFNSJob = () => {
                             descricao: item.elementoDespesa?.nome || 'Não especificada',
                             valor: item.valorLiquidado || 0,
                             competencia: `${mesAtual}/${anoAtual}`,
-                            raw_json: item
+                            rawJson: item
                         });
                         totais.despesas++;
                     }
@@ -40,20 +44,22 @@ const startFNSJob = () => {
             }
 
             // 2. Sincronizar Transferências do Ano Atual
-            const transferencias = await fnsService.getTransferenciasMunicipio({
-                codigoIBGE: MUNICIPIO_PADRAO_IBGE,
-                ano: anoAtual
-            });
-            for (const trans of transferencias) {
-                await repository.saveTransferencia({
-                    codigoIbge: MUNICIPIO_PADRAO_IBGE,
-                    municipio: trans.municipio?.nome || 'Belo Horizonte',
-                    valor: trans.valor || 0,
-                    bloco: trans.subfuncao?.nome || 'Saúde',
-                    ano: anoAtual,
-                    raw_json: trans
+            if (MUNICIPIO_IBGE) {
+                const transferencias = await fnsService.getTransferenciasMunicipio({
+                    codigoIBGE: MUNICIPIO_IBGE,
+                    ano: anoAtual
                 });
-                totais.transferencias++;
+                for (const trans of transferencias) {
+                    await repository.saveTransferencia({
+                        codigoIbge: MUNICIPIO_IBGE,
+                        municipio: trans.municipio?.nome || 'Belo Horizonte',
+                        valor: trans.valor || 0,
+                        bloco: trans.subfuncao?.nome || 'Saúde',
+                        ano: anoAtual,
+                        rawJson: trans
+                    });
+                    totais.transferencias++;
+                }
             }
 
             // 3. Sincronizar Convênios do Ano Atual
@@ -66,7 +72,7 @@ const startFNSJob = () => {
                     situacao: conv.situacao,
                     dataInicio: conv.dataInicio,
                     dataFim: conv.dataFim,
-                    raw_json: conv
+                    rawJson: conv
                 });
                 totais.convenios++;
             }
@@ -76,12 +82,10 @@ const startFNSJob = () => {
             console.log(`- Duração: ${duration}s`);
             console.log(`- Despesas: ${totais.despesas} | Transferências: ${totais.transferencias} | Convênios: ${totais.convenios}`);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error(`[${new Date().toISOString()}] Erro no Job FNS:`, error.message);
         }
     });
 
     console.log('🚀 Job FNS Agendado: Todo dia às 02:00h');
 };
-
-module.exports = { startFNSJob };

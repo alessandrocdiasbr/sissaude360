@@ -1,7 +1,8 @@
-const db = require('../../config/database');
+import db from '../../config/database';
+import { DespesaFNS, TransferenciaFNS, ConvenioFNS } from './fns.types';
 
 class FNSRepository {
-  async saveDespesa(data) {
+  async saveDespesa(data: DespesaFNS): Promise<DespesaFNS> {
     const query = `
       INSERT INTO fns_despesas (codigo_orgao, descricao, valor, competencia, raw_json)
       VALUES ($1, $2, $3, $4, $5)
@@ -12,12 +13,12 @@ class FNSRepository {
         importado_em = CURRENT_TIMESTAMP
       RETURNING *;
     `;
-    const values = [data.codigoOrgao, data.descricao, data.valor, data.competencia, data.raw_json];
+    const values = [data.codigoOrgao, data.descricao, data.valor, data.competencia, data.rawJson];
     const { rows } = await db.query(query, values);
     return rows[0];
   }
 
-  async saveTransferencia(data) {
+  async saveTransferencia(data: TransferenciaFNS): Promise<TransferenciaFNS> {
     const query = `
       INSERT INTO fns_transferencias (codigo_ibge, municipio, valor, bloco, ano, raw_json)
       VALUES ($1, $2, $3, $4, $5, $6)
@@ -27,12 +28,12 @@ class FNSRepository {
         importado_em = CURRENT_TIMESTAMP
       RETURNING *;
     `;
-    const values = [data.codigoIbge, data.municipio, data.valor, data.bloco, data.ano, data.raw_json];
+    const values = [data.codigoIbge, data.municipio, data.valor, data.bloco, data.ano, data.rawJson];
     const { rows } = await db.query(query, values);
     return rows[0];
   }
 
-  async saveConvenio(data) {
+  async saveConvenio(data: ConvenioFNS): Promise<ConvenioFNS> {
     const query = `
       INSERT INTO fns_convenios (numero, objeto, valor_global, situacao, data_inicio, data_fim, raw_json)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -50,7 +51,7 @@ class FNSRepository {
       data.situacao,
       data.dataInicio,
       data.dataFim,
-      data.raw_json
+      data.rawJson
     ];
     const { rows } = await db.query(query, values);
     return rows[0];
@@ -58,7 +59,7 @@ class FNSRepository {
 
   // --- QUERIES DE LISTAGEM ---
 
-  async listarDespesas({ ano, mes, pagina = 1, limite = 20 }) {
+  async listarDespesas({ ano, mes, pagina = 1, limite = 20 }: { ano: number, mes: number, pagina?: number, limite?: number }): Promise<{ rows: DespesaFNS[], total: number }> {
     const offset = (pagina - 1) * limite;
     const competencia = `${String(mes).padStart(2, '0')}/${ano}`;
 
@@ -76,7 +77,7 @@ class FNSRepository {
     return { rows, total: parseInt(total.rows[0].count) };
   }
 
-  async listarTransferencias({ codigoIBGE, ano, pagina = 1, limite = 20 }) {
+  async listarTransferencias({ codigoIBGE, ano, pagina = 1, limite = 20 }: { codigoIBGE: string, ano: number, pagina?: number, limite?: number }): Promise<{ rows: TransferenciaFNS[], total: number }> {
     const offset = (pagina - 1) * limite;
 
     const countQuery = 'SELECT COUNT(*) FROM fns_transferencias WHERE codigo_ibge = $1 AND ano = $2';
@@ -93,7 +94,7 @@ class FNSRepository {
     return { rows, total: parseInt(total.rows[0].count) };
   }
 
-  async resumoMunicipio(codigoIBGE, ano) {
+  async resumoMunicipio(codigoIBGE: string, ano: number): Promise<any[]> {
     const query = `
       SELECT bloco, SUM(valor) as total 
       FROM fns_transferencias 
@@ -105,10 +106,10 @@ class FNSRepository {
     return rows;
   }
 
-  async listarConvenios({ ano, situacao, pagina = 1, limite = 20 }) {
+  async listarConvenios({ ano, situacao, pagina = 1, limite = 20 }: { ano: number, situacao?: string, pagina?: number, limite?: number }): Promise<{ rows: ConvenioFNS[], total: number }> {
     const offset = (pagina - 1) * limite;
     let where = 'WHERE EXTRACT(YEAR FROM data_inicio) = $1';
-    let params = [ano];
+    let params: (string | number)[] = [ano];
 
     if (situacao) {
       where += ' AND situacao ILIKE $2';
@@ -130,4 +131,4 @@ class FNSRepository {
   }
 }
 
-module.exports = new FNSRepository();
+export default new FNSRepository();

@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS fns_despesas (
     valor DECIMAL(15,2),
     competencia VARCHAR(7), -- Formato MM/AAAA
     raw_json JSONB,
-    importado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    importado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_despesas_orgao_competencia UNIQUE (codigo_orgao, competencia)
 );
 
 -- Tabela de Transferências FNS
@@ -21,7 +22,8 @@ CREATE TABLE IF NOT EXISTS fns_transferencias (
     bloco VARCHAR(100),
     ano INTEGER,
     raw_json JSONB,
-    importado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    importado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_transferencias_ibge_ano_bloco UNIQUE (codigo_ibge, ano, bloco)
 );
 
 -- Tabela de Convênios FNS

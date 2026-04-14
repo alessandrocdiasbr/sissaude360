@@ -4,7 +4,11 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_health_360';
+const JWT_SECRET = process.env.JWT_SECRET!;
+
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET não definido nas variáveis de ambiente.');
+}
 
 export const login = async (req: Request, res: Response) => {
   try {

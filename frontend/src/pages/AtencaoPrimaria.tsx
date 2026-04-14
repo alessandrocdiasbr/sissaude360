@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
@@ -8,83 +8,57 @@ import {
   Grid3X3,
   TrendingUp,
   AlertCircle,
-  ArrowLeft
+  ArrowLeft,
+  Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { useUnidades, useIndicadores, useAPSPerformance } from '../hooks/useAPS';
 
 const AtencaoPrimaria = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('individual'); // 'individual' | 'overview'
-  const [selectedUnidade, setSelectedUnidade] = useState('Todas');
-  const [selectedIndicador, setSelectedIndicador] = useState('i2'); // Default: Mais Acesso
-  const [loading, setLoading] = useState(false);
-  const [unidades, setUnidades] = useState<any[]>([]);
-  const [indicadores, setIndicadores] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'individual' | 'overview'>('individual');
+  const [selectedUnidade, setSelectedUnidade] = useState<string>('Todas');
+  const [selectedIndicador, setSelectedIndicador] = useState<string>(''); // Vazio inicialmente para pegar o primeiro da lista
+
+  // Hooks de Dados Reais
+  const { data: unidades = [], isLoading: loadingUnidades } = useUnidades();
+  const { data: indicadores = [], isLoading: loadingIndicadores } = useIndicadores();
   
-  // Dados de Fallback (16 indicadores)
-  const fullIndicadoresList = [
-    { id: 'i1', nome: 'Resumo de Produção' },
-    { id: 'i2', nome: 'Mais Acesso' },
-    { id: 'i3', nome: 'Desenvolvimento Infantil' },
-    { id: 'i4', nome: 'Gestação e Puerpério' },
-    { id: 'i5', nome: 'Diabetes' },
-    { id: 'i6', nome: 'Hipertensão' },
-    { id: 'i7', nome: 'Pessoa idosa' },
-    { id: 'i8', nome: 'Prevenção do Câncer' },
-    { id: 'i9', nome: '1ª Consulta Odontológica' },
-    { id: 'i10', nome: 'Tratamento Odontológico Concluído' },
-    { id: 'i11', nome: 'Taxa de Exodontia' },
-    { id: 'i12', nome: 'Escovação Supervisionada' },
-    { id: 'i13', nome: 'Procedimento Odontológico Preventivo' },
-    { id: 'i14', nome: 'Tratamento Atraumático' },
-    { id: 'i15', nome: 'Média de Atendimento eMulti na APS' },
-    { id: 'i16', nome: 'Ações Interprofissionais' }
-  ];
+  // Ajustar indicador padrão caso nenhum esteja selecionado
+  React.useEffect(() => {
+    if (!selectedIndicador && indicadores.length > 0) {
+      setSelectedIndicador(indicadores[0].id);
+    }
+  }, [indicadores, selectedIndicador]);
 
-  const fullUnidadesList = [
-    { id: '1', nome: 'Rua Nova' },
-    { id: '2', nome: 'Vila Santana' },
-    { id: '3', nome: 'Centro' },
-    { id: '4', nome: 'Alencar' },
-    { id: '5', nome: 'Rural' }
-  ];
+  const { 
+    data: performanceData, 
+    isLoading: loadingPerformance,
+    isError: errorPerformance
+  } = useAPSPerformance(
+    selectedUnidade === 'Todas' ? undefined : selectedUnidade,
+    selectedIndicador || undefined
+  );
 
-  // Carregar Unidades e Indicadores da API ou Fallback
-  useEffect(() => {
-    const fetchMeta = async () => {
-      try {
-        const [resU, resI] = await Promise.all([
-          axios.get('http://localhost:3001/api/unidades').catch(() => ({ data: [] })),
-          axios.get('http://localhost:3001/api/indicadores').catch(() => ({ data: [] }))
-        ]);
-        setUnidades(resU.data.length > 0 ? resU.data : fullUnidadesList);
-        setIndicadores(resI.data.length > 0 ? resI.data : fullIndicadoresList);
-      } catch (e) {
-        setUnidades(fullUnidadesList);
-        setIndicadores(fullIndicadoresList);
-      }
-    };
-    fetchMeta();
-  }, []);
+  const currentIndicator = indicadores.find(i => i.id === selectedIndicador);
+  const currentUnidade = unidades.find(u => u.id === selectedUnidade);
 
-  // Lógica Reativa: Gera dados simulados baseados na seleção (enquanto API não tem DB)
-  const reactiveData = useMemo(() => {
-    const baseValue = selectedIndicador === 'i2' ? 7.91 : Math.random() * 20 + 5;
-    const growth = selectedUnidade === '1' ? 1.84 : 1.2; // Rua Nova cresce mais no demo
-    
-    return [
-      { mes: 'Jan', valor2025: baseValue.toFixed(2), valor2026: (baseValue * growth).toFixed(2) },
-      { mes: 'Fev', valor2025: (baseValue * 1.05).toFixed(2), valor2026: (baseValue * growth * 1.1).toFixed(2) },
-      { mes: 'Mar', valor2025: (baseValue * 1.1).toFixed(2), valor2026: (baseValue * growth * 1.2).toFixed(2) },
-      { mes: 'Abr', valor2025: (baseValue * 1.15).toFixed(2), valor2026: (baseValue * growth * 1.1).toFixed(2) },
-      { mes: 'Mai', valor2025: (baseValue * 1.2).toFixed(2), valor2026: (baseValue * growth * 1.3).toFixed(2) },
-    ];
-  }, [selectedUnidade, selectedIndicador]);
+  // Valores Consolidados para os Cards do Topo
+  const resumoDashboard = performanceData?.resumo || [];
+  const totalEvolucaoMedia = resumoDashboard.length > 0
+    ? (resumoDashboard.reduce((acc, curr) => acc + parseFloat(curr.evolucao), 0) / resumoDashboard.length).toFixed(1)
+    : '0';
 
-  // Insights Dinâmicos
-  const currentIndicatorName = indicadores.find(i => i.id === selectedIndicador)?.nome || 'Indicador';
-  const evolution = ((parseFloat(reactiveData[0].valor2026) - parseFloat(reactiveData[0].valor2025)) / parseFloat(reactiveData[0].valor2025) * 100).toFixed(1);
+  if (errorPerformance) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-500 gap-4">
+        <AlertCircle size={48} className="text-red-500" />
+        <h2 className="text-xl font-bold text-slate-800">Erro ao carregar indicadores APS</h2>
+        <p>Verifique sua conexão ou tente novamente mais tarde.</p>
+        <button onClick={() => window.location.reload()} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold">Tentar Novamente</button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 h-full overflow-y-auto">
@@ -115,6 +89,7 @@ const AtencaoPrimaria = () => {
             value={selectedUnidade} 
             onChange={setSelectedUnidade} 
             options={[{id: 'Todas', nome: 'Todas as Equipes'}, ...unidades]} 
+            loading={loadingUnidades}
           />
           {activeTab === 'individual' && (
             <FilterSelect 
@@ -122,17 +97,27 @@ const AtencaoPrimaria = () => {
               value={selectedIndicador} 
               onChange={setSelectedIndicador} 
               options={indicadores} 
+              loading={loadingIndicadores}
             />
           )}
         </div>
       </div>
 
-      {activeTab === 'individual' ? (
-        <IndividualView data={reactiveData} indicatorName={currentIndicatorName} evolution={evolution} />
+      {loadingPerformance ? (
+        <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-400 gap-4">
+          <Loader2 className="animate-spin text-blue-600" size={32} />
+          <p className="font-medium animate-pulse">Sincronizando com e-SUS APS...</p>
+        </div>
+      ) : activeTab === 'individual' ? (
+        <IndividualView 
+          data={resumoDashboard} 
+          indicatorName={currentIndicator?.nome || 'Nenhum Selecionado'} 
+          evolution={totalEvolucaoMedia} 
+        />
       ) : (
         <OverviewView 
-          unidadeName={unidades.find(u => u.id === selectedUnidade)?.nome || 'Equipe'} 
-          indicadores={indicadores} 
+          unidadeName={currentUnidade?.nome || 'Todas as Unidades'} 
+          resumo={resumoDashboard} 
         />
       )}
     </div>
@@ -145,10 +130,10 @@ const IndividualView = ({ data, indicatorName, evolution }: any) => (
   <>
     {/* Stats Overview */}
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <Card title={`${indicatorName} (Jan/26)`} value={`${data[0].valor2026}%`} status={getStatusText(data[0].valor2026)} evolution={`+${evolution}%`} up />
-      <Card title="Crescimento Médio" value={`${(parseFloat(evolution) * 0.8).toFixed(1)}%`} status="Bom" evolution="+2.1%" up />
-      <Card title="Metas Batidas" value="14/16" status="Ótimo" evolution="+2" up />
-      <Card title="Pendências" value="2" status="Suficiente" evolution="-1" down />
+      <Card title={`${indicatorName} (2026)`} value={data[0]?.valor2026 ? `${data[0].valor2026}%` : 'N/A'} status={data[0]?.status2026 || 'Pendente'} evolution={`${evolution}%`} up={parseFloat(evolution) >= 0} />
+      <Card title="Crescimento Médio" value={`${evolution}%`} status={parseFloat(evolution) > 0 ? 'Bom' : 'Atenção'} evolution={`${evolution}%`} up={parseFloat(evolution) >= 0} />
+      <Card title="Qtde Indicadores" value={data.length} status="Análise" evolution="Ativos" up />
+      <Card title="Status do Ciclo" value="Em Foco" status="Suficiente" evolution="Ciclo 2026" up />
     </div>
 
     {/* Main Charts area */}
@@ -178,20 +163,21 @@ const IndividualView = ({ data, indicatorName, evolution }: any) => (
 
       <div className="dashboard-card border-l-4 border-l-blue-500 flex flex-col">
         <h3 className="font-bold text-lg text-slate-800 mb-6 flex items-center gap-2">
-          <AlertCircle size={20} className="text-blue-500" /> Analise de Gestão
+          <AlertCircle size={20} className="text-blue-500" /> Análise de Gestão
         </h3>
-        <div className="space-y-6 flex-1">
+        <div className="space-y-6 flex-1 text-slate-600 font-medium">
           <div className="p-4 bg-blue-50 rounded-xl">
-            <p className="text-sm text-blue-800 font-medium leading-relaxed">
-              O indicador <strong>{indicatorName}</strong> apresentou evolução de {evolution}% no início do ciclo 2026. Recomendado manter as estratégias atuais.
+            <p className="text-sm text-blue-800 leading-relaxed">
+              Baseado nos dados reais do <strong>e-SUS</strong>, o desempenho global para <strong>{indicatorName}</strong> reflete a produção consolidada das equipes.
             </p>
           </div>
           
           <div className="space-y-4">
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Resumo Outros Indicadores</h4>
-            <StatusRow label="Diabetes" value="12.4%" status="Suficiente" color="bg-yellow-500" />
-            <StatusRow label="Hipertensão" value="19.1%" status="Bom" color="bg-green-500" />
-            <StatusRow label="Odonto" value="23.5%" status="Ótimo" color="bg-blue-500" />
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Ações Recomendadas</h4>
+            <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg text-xs leading-relaxed">
+              • Intensificar as buscas ativas conforme cronograma.<br/><br/>
+              • Validar as fichas de atendimento no PEC para garantir o processamento correto.
+            </div>
           </div>
         </div>
       </div>
@@ -199,11 +185,11 @@ const IndividualView = ({ data, indicatorName, evolution }: any) => (
   </>
 );
 
-const OverviewView = ({ unidadeName, indicadores }: any) => (
+const OverviewView = ({ unidadeName, resumo }: any) => (
   <div className="dashboard-card !p-0 overflow-hidden">
     <div className="p-6 border-b border-slate-100 bg-slate-50/50">
       <h3 className="font-bold text-lg text-slate-800">Visão Geral: {unidadeName}</h3>
-      <p className="text-sm text-slate-500">Comparativo de todos os {indicadores.length} indicadores para esta unidade.</p>
+      <p className="text-sm text-slate-500">Comparativo consolidado de indicadores reais para esta visão.</p>
     </div>
     <div className="overflow-x-auto">
       <table className="w-full text-left">
@@ -217,28 +203,26 @@ const OverviewView = ({ unidadeName, indicadores }: any) => (
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 text-sm">
-          {indicadores.map((ind: any, idx: number) => {
-            const v25 = (Math.random() * 15 + 5).toFixed(2);
-            const v26 = (parseFloat(v25) * (v25 > '10' ? 1.2 : 1.5)).toFixed(2);
-            const diff = (((parseFloat(v26) - parseFloat(v25)) / parseFloat(v25)) * 100).toFixed(1);
-            return (
-              <tr key={ind.id} className="hover:bg-slate-50/50 transition-colors">
-                <td className="px-6 py-4 font-semibold text-slate-800">{ind.nome}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
-                    getStatusClass(parseFloat(v26))
-                  }`}>
-                    {getStatusText(parseFloat(v26))}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-slate-500">{v25}%</td>
-                <td className="px-6 py-4 font-bold text-slate-900">{v26}%</td>
-                <td className={`px-6 py-4 font-bold ${parseFloat(diff) > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  +{diff}%
-                </td>
-              </tr>
-            );
-          })}
+          {resumo.map((item: any, idx: number) => (
+            <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+              <td className="px-6 py-4 font-semibold text-slate-800">{item.indicador}</td>
+              <td className="px-6 py-4">
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${getStatusClass(item.status2026)}`}>
+                  {item.status2026}
+                </span>
+              </td>
+              <td className="px-6 py-4 text-slate-500">{item.valor2025}%</td>
+              <td className="px-6 py-4 font-bold text-slate-900">{item.valor2026}%</td>
+              <td className={`px-6 py-4 font-bold ${parseFloat(item.evolucao) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {parseFloat(item.evolucao) >= 0 ? '+' : ''}{item.evolucao}%
+              </td>
+            </tr>
+          ))}
+          {resumo.length === 0 && (
+            <tr>
+              <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">Nenhum dado de produção encontrado para os filtros selecionados.</td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -247,16 +231,11 @@ const OverviewView = ({ unidadeName, indicadores }: any) => (
 
 // --- Helpers & UI Components ---
 
-const Card = ({ title, value, status, evolution, up, down }: any) => (
+const Card = ({ title, value, status, evolution, up }: any) => (
   <div className="dashboard-card group hover:scale-[1.02] transition-all">
     <div className="flex justify-between items-start mb-4">
       <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{title}</span>
-      <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-          status === 'Ótimo' ? 'bg-blue-100 text-blue-700' :
-          status === 'Bom' ? 'bg-green-100 text-green-700' :
-          status === 'Suficiente' ? 'bg-yellow-100 text-yellow-700' :
-          'bg-red-100 text-red-700'
-        }`}>
+      <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${getStatusClass(status)}`}>
         {status}
       </div>
     </div>
@@ -270,18 +249,26 @@ const Card = ({ title, value, status, evolution, up, down }: any) => (
   </div>
 );
 
-const FilterSelect = ({ label, value, onChange, options }: any) => (
-  <div className="flex flex-col gap-1.5">
+const FilterSelect = ({ label, value, onChange, options, loading }: any) => (
+  <div className="flex flex-col gap-1.5 min-w-[180px]">
     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">{label}</label>
-    <select 
-      className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none shadow-sm transition-all"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      {options.map((o: any) => (
-        <option key={o.id} value={o.id}>{o.nome}</option>
-      ))}
-    </select>
+    <div className="relative">
+      <select 
+        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none shadow-sm transition-all appearance-none cursor-pointer disabled:opacity-50"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={loading}
+      >
+        {options.map((o: any) => (
+          <option key={o.id} value={o.id}>{o.nome}</option>
+        ))}
+      </select>
+      {loading && (
+        <div className="absolute inset-y-0 right-3 flex items-center">
+          <Loader2 className="animate-spin text-slate-400" size={16} />
+        </div>
+      )}
+    </div>
   </div>
 );
 
@@ -304,33 +291,15 @@ const LegendItem = ({ color, label }: any) => (
   </div>
 );
 
-const StatusRow = ({ label, value, status, color }: any) => (
-  <div className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 transition-colors">
-    <div className="flex items-center gap-3">
-      <div className={`w-2 h-2 rounded-full ${color}`}></div>
-      <span className="text-sm font-medium text-slate-700">{label}</span>
-    </div>
-    <div className="text-right">
-      <div className="text-sm font-bold text-slate-900">{value}</div>
-      <div className="text-[10px] text-slate-400 font-bold uppercase">{status}</div>
-    </div>
-  </div>
-);
-
-const getStatusText = (v: any) => {
-  const score = parseFloat(v);
-  if (score >= 18) return 'Ótimo';
-  if (score >= 15) return 'Bom';
-  if (score >= 10) return 'Suficiente';
-  return 'Regular';
-};
-
-const getStatusClass = (v: any) => {
-  const score = parseFloat(v);
-  if (score >= 18) return 'bg-blue-100 text-blue-700';
-  if (score >= 15) return 'bg-green-100 text-green-700';
-  if (score >= 10) return 'bg-yellow-100 text-yellow-700';
-  return 'bg-red-100 text-red-700';
+const getStatusClass = (status: string) => {
+  switch (status) {
+    case 'Ótimo': return 'bg-blue-100 text-blue-700';
+    case 'Bom': return 'bg-green-100 text-green-700';
+    case 'Suficiente': return 'bg-yellow-100 text-yellow-700';
+    case 'Regular': return 'bg-red-100 text-red-700';
+    default: return 'bg-slate-100 text-slate-600';
+  }
 };
 
 export default AtencaoPrimaria;
+

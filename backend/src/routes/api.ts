@@ -5,12 +5,17 @@ import { listUnidades, createUnidade, updateUnidade, deleteUnidade } from '../co
 import { listItens, createItem, updateItem } from '../controllers/ItemController';
 import { getEstoque, movimentarEstoque } from '../controllers/EstoqueController';
 import { listServidores, createServidor, updateServidor, deleteServidor } from '../controllers/ServidorController';
+import fnsRoutes from '../modules/fns/fns.routes';
+import { authenticateToken } from '../middlewares/auth';
 
 const router = Router();
-router.use(express.json()); // Garantir parsing de JSON
+router.use(express.json());
 
-// Auth
+// Rota Pública
 router.post('/auth/login', login);
+
+// Rotas Protegidas
+router.use(authenticateToken);
 
 // Unidades (CRUD Administração)
 router.get('/unidades', listUnidades);
@@ -30,13 +35,14 @@ router.get('/servidores', listServidores);
 router.post('/servidores', createServidor);
 router.put('/servidores/:id', updateServidor);
 router.delete('/servidores/:id', deleteServidor);
-router.get('/indicadores', listIndicadores);
 
-// Produção e Dashboard
+// APS (Indicadores e Produção)
+router.get('/indicadores', listIndicadores);
 router.get('/dashboard', getDashboardData);
 router.post('/producao', createProducao);
-// FNS
-const fnsRoutes = require('../modules/fns/fns.routes');
+
+// Módulos
 router.use('/fns', fnsRoutes);
 
 export { router as apiRoutes };
+
