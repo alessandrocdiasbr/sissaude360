@@ -8,8 +8,9 @@
     "strict": true,
     "skipLibCheck": true,
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": ".",
+    "types": ["node"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "prisma/seeds/**/*.ts"],
   "exclude": ["node_modules", "**/*.spec.ts"]
 }

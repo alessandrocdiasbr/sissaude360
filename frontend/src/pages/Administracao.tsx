@@ -18,10 +18,22 @@ const Administracao = () => {
         telefone: ''
     });
 
+    const getHeaders = () => {
+        const sessionData = localStorage.getItem('sissaude360_token');
+        const headers: any = { 'Content-Type': 'application/json' };
+        if (sessionData) {
+            try {
+                const { token } = JSON.parse(sessionData);
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+            } catch (e) {}
+        }
+        return headers;
+    };
+
     const fetchUnidades = async () => {
         try {
             setLoading(true);
-            const res = await fetch(`${API_URL}/unidades`);
+            const res = await fetch(`${API_URL}/unidades`, { headers: getHeaders() });
             const data = await res.json();
             if (Array.isArray(data)) {
                 setUnidades(data);
@@ -64,7 +76,7 @@ const Administracao = () => {
         try {
             const res = await fetch(url, {
                 method,
-                headers: { 'Content-Type': 'application/json' },
+                headers: getHeaders(),
                 body: JSON.stringify(formData)
             });
 
@@ -84,7 +96,10 @@ const Administracao = () => {
         if (!confirm('Tem certeza que deseja excluir esta unidade?')) return;
 
         try {
-            const res = await fetch(`${API_URL}/unidades/${id}`, { method: 'DELETE' });
+            const res = await fetch(`${API_URL}/unidades/${id}`, { 
+                method: 'DELETE',
+                headers: getHeaders()
+            });
             if (res.ok) fetchUnidades();
         } catch (error) {
             alert('Erro ao excluir unidade');

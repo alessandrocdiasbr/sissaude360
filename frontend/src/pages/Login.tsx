@@ -38,9 +38,9 @@ const Login = () => {
                 {/* Logo Area */}
                 <div className="text-center mb-8">
                     <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-blue-600/20">
-                        <span className="text-white font-bold text-2xl">SB</span>
+                        <span className="text-white font-bold text-2xl">MS</span>
                     </div>
-                    <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">SisSaúde360</h1>
+                    <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Monitora Saúde</h1>
                     <p className="text-slate-500 mt-2 font-medium">Gestão Inteligente para Saúde Pública</p>
                 </div>
 

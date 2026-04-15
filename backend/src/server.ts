@@ -41,7 +41,7 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server Saúde Brasil 360 running on port ${PORT}`);
+  console.log(`🚀 Server Monitora Saúde running on port ${PORT}`);
 
   // Iniciar Jobs Agendados
   startFNSJob();

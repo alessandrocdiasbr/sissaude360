@@ -3,11 +3,13 @@ import { getDashboardData, createProducao, listIndicadores } from '../controller
 import { login } from '../controllers/AuthController';
 import { listUnidades, createUnidade, updateUnidade, deleteUnidade } from '../controllers/UnidadeController';
 import { listItens, createItem, updateItem } from '../controllers/ItemController';
-import { getEstoque, movimentarEstoque } from '../controllers/EstoqueController';
+import { getEstoque, movimentarEstoque, getItensCriticos, getMovimentacoesMes } from '../controllers/EstoqueController';
 import { listServidores, createServidor, updateServidor, deleteServidor } from '../controllers/ServidorController';
 import fnsRoutes from '../modules/fns/fns.routes';
 import { authenticateToken } from '../middlewares/auth';
 import filaRoutes from './filaRoutes';
+import planejamentoRoutes from './planejamentoRoutes';
+import apsRoutes from './apsRoutes';
 
 const router = Router();
 router.use(express.json());
@@ -29,6 +31,8 @@ router.get('/itens', listItens);
 router.post('/itens', createItem);
 router.put('/itens/:id', updateItem);
 router.get('/estoque', getEstoque);
+router.get('/estoque/criticos', getItensCriticos);
+router.get('/estoque/movimentacoes-mes', getMovimentacoesMes);
 router.post('/estoque/movimentar', movimentarEstoque);
 
 // Gestão de Pessoas (Servidores)
@@ -45,6 +49,8 @@ router.post('/producao', createProducao);
 // Módulos
 router.use('/fns', fnsRoutes);
 router.use('/fila', filaRoutes);
+router.use('/planejamento', planejamentoRoutes);
+router.use('/aps', apsRoutes);
 
 export { router as apiRoutes };
 

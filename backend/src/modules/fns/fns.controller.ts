@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import repository from './fns.repository';
+import service from './fns.service';
 import { RespostaPaginada, DespesaFNS, TransferenciaFNS, ConvenioFNS } from './fns.types';
 
 class FNSController {
@@ -77,7 +78,7 @@ class FNSController {
                 return res.status(400).json({ erro: 'Código IBGE e Ano são obrigatórios.' });
             }
 
-            const resumo = await repository.resumoMunicipio(ibge, parseInt(ano as string));
+            const resumo = await repository.resumoMunicipio(ibge as string, parseInt(ano as string));
             res.json({ dados: resumo });
         } catch (error) {
             res.status(500).json({ erro: 'Erro ao gerar resumo do município.' });
@@ -114,6 +115,47 @@ class FNSController {
             res.json(resposta);
         } catch (error) {
             res.status(500).json({ erro: 'Erro ao buscar convênios.' });
+        }
+    }
+
+    async sincronizar(req: Request, res: Response) {
+        try {
+            const { ano, ibge } = req.body;
+            if (!ano || !ibge) {
+                return res.status(400).json({ erro: 'Parâmetros ano e ibge são obrigatórios para sincronismo.' });
+            }
+
+            // 1. Sincronizar Transferências (Resumo do Município)
+            const transferencias = await service.getTransferenciasMunicipio({ codigoIBGE: ibge, ano: parseInt(ano) });
+            for (const t of transferencias) {
+                await repository.saveTransferencia({
+                    codigoIbge: ibge,
+                    municipio: t.municipio?.nome || '—',
+                    valor: t.valor,
+                    bloco: t.naturezaDespesa?.descricao || 'Outros',
+                    ano: parseInt(ano),
+                    rawJson: t
+                });
+            }
+
+            // 2. Sincronizar Convênios
+            const convenios = await service.getConveniosSaude({ ano: parseInt(ano) });
+            for (const c of convenios) {
+                await repository.saveConvenio({
+                    numero: c.numeroConvenio,
+                    objeto: c.objetoConvenio,
+                    valorGlobal: c.valorGlobal,
+                    situacao: c.situacaoConvenio,
+                    dataInicio: c.dataInicioVigencia,
+                    dataFim: c.dataFimVigencia,
+                    rawJson: c
+                });
+            }
+
+            res.json({ mensagem: 'Sincronização concluída com sucesso.', totalTransferencias: transferencias.length, totalConvenios: convenios.length });
+        } catch (error: any) {
+            console.error('FNS Sync Error:', error.message);
+            res.status(500).json({ erro: 'Erro durante a sincronização dos dados FNS.' });
         }
     }
 }

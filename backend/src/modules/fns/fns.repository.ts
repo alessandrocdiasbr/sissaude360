@@ -1,133 +1,153 @@
-import db from '../../config/database';
+import { PrismaClient } from '@prisma/client';
 import { DespesaFNS, TransferenciaFNS, ConvenioFNS } from './fns.types';
 
+const prisma = new PrismaClient();
+
 class FNSRepository {
-  async saveDespesa(data: DespesaFNS): Promise<DespesaFNS> {
-    const query = `
-      INSERT INTO fns_despesas (codigo_orgao, descricao, valor, competencia, raw_json)
-      VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (codigo_orgao, competencia) DO UPDATE SET
-        valor = EXCLUDED.valor,
-        descricao = EXCLUDED.descricao,
-        raw_json = EXCLUDED.raw_json,
-        importado_em = CURRENT_TIMESTAMP
-      RETURNING *;
-    `;
-    const values = [data.codigoOrgao, data.descricao, data.valor, data.competencia, data.rawJson];
-    const { rows } = await db.query(query, values);
-    return rows[0];
+  async saveDespesa(data: DespesaFNS): Promise<any> {
+    return await prisma.fNSDespesa.upsert({
+      where: {
+        uniq_despesa_competencia: {
+          codigoOrgao: data.codigoOrgao,
+          competencia: data.competencia,
+        },
+      },
+      update: {
+        valor: data.valor,
+        descricao: data.descricao,
+        rawJson: data.rawJson as any,
+        importadoEm: new Date(),
+      },
+      create: {
+        codigoOrgao: data.codigoOrgao,
+        descricao: data.descricao,
+        valor: data.valor,
+        competencia: data.competencia,
+        rawJson: data.rawJson as any,
+      },
+    });
   }
 
-  async saveTransferencia(data: TransferenciaFNS): Promise<TransferenciaFNS> {
-    const query = `
-      INSERT INTO fns_transferencias (codigo_ibge, municipio, valor, bloco, ano, raw_json)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT (codigo_ibge, ano, bloco) DO UPDATE SET
-        valor = EXCLUDED.valor,
-        raw_json = EXCLUDED.raw_json,
-        importado_em = CURRENT_TIMESTAMP
-      RETURNING *;
-    `;
-    const values = [data.codigoIbge, data.municipio, data.valor, data.bloco, data.ano, data.rawJson];
-    const { rows } = await db.query(query, values);
-    return rows[0];
+  async saveTransferencia(data: TransferenciaFNS): Promise<any> {
+    return await prisma.fNSTransferencia.upsert({
+      where: {
+        uniq_transferencia_ano_bloco: {
+          codigoIbge: data.codigoIbge,
+          ano: data.ano,
+          bloco: data.bloco,
+        },
+      },
+      update: {
+        valor: data.valor,
+        rawJson: data.rawJson as any,
+        importadoEm: new Date(),
+      },
+      create: {
+        codigoIbge: data.codigoIbge,
+        municipio: data.municipio,
+        valor: data.valor,
+        bloco: data.bloco,
+        ano: data.ano,
+        rawJson: data.rawJson as any,
+      },
+    });
   }
 
-  async saveConvenio(data: ConvenioFNS): Promise<ConvenioFNS> {
-    const query = `
-      INSERT INTO fns_convenios (numero, objeto, valor_global, situacao, data_inicio, data_fim, raw_json)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      ON CONFLICT (numero) DO UPDATE SET
-        situacao = EXCLUDED.situacao,
-        data_fim = EXCLUDED.data_fim,
-        raw_json = EXCLUDED.raw_json,
-        importado_em = CURRENT_TIMESTAMP
-      RETURNING *;
-    `;
-    const values = [
-      data.numero,
-      data.objeto,
-      data.valorGlobal,
-      data.situacao,
-      data.dataInicio,
-      data.dataFim,
-      data.rawJson
-    ];
-    const { rows } = await db.query(query, values);
-    return rows[0];
+  async saveConvenio(data: ConvenioFNS): Promise<any> {
+    return await prisma.fNSConvenio.upsert({
+      where: { numero: data.numero },
+      update: {
+        situacao: data.situacao,
+        dataFim: data.dataFim ? new Date(data.dataFim) : null,
+        rawJson: data.rawJson as any,
+        importadoEm: new Date(),
+      },
+      create: {
+        numero: data.numero,
+        objeto: data.objeto,
+        valorGlobal: data.valorGlobal,
+        situacao: data.situacao,
+        dataInicio: data.dataInicio ? new Date(data.dataInicio) : null,
+        dataFim: data.dataFim ? new Date(data.dataFim) : null,
+        rawJson: data.rawJson as any,
+      },
+    });
   }
 
   // --- QUERIES DE LISTAGEM ---
 
-  async listarDespesas({ ano, mes, pagina = 1, limite = 20 }: { ano: number, mes: number, pagina?: number, limite?: number }): Promise<{ rows: DespesaFNS[], total: number }> {
-    const offset = (pagina - 1) * limite;
+  async listarDespesas({ ano, mes, pagina = 1, limite = 20 }: { ano: number, mes: number, pagina?: number, limite?: number }): Promise<{ rows: any[], total: number }> {
+    const skip = (pagina - 1) * limite;
     const competencia = `${String(mes).padStart(2, '0')}/${ano}`;
 
-    const countQuery = 'SELECT COUNT(*) FROM fns_despesas WHERE competencia = $1';
-    const dataQuery = `
-      SELECT * FROM fns_despesas 
-      WHERE competencia = $1 
-      ORDER BY valor DESC 
-      LIMIT $2 OFFSET $3
-    `;
+    const [total, rows] = await Promise.all([
+      prisma.fNSDespesa.count({ where: { competencia } }),
+      prisma.fNSDespesa.findMany({
+        where: { competencia },
+        orderBy: { valor: 'desc' },
+        skip,
+        take: limite,
+      }),
+    ]);
 
-    const total = await db.query(countQuery, [competencia]);
-    const { rows } = await db.query(dataQuery, [competencia, limite, offset]);
-
-    return { rows, total: parseInt(total.rows[0].count) };
+    return { rows, total };
   }
 
-  async listarTransferencias({ codigoIBGE, ano, pagina = 1, limite = 20 }: { codigoIBGE: string, ano: number, pagina?: number, limite?: number }): Promise<{ rows: TransferenciaFNS[], total: number }> {
-    const offset = (pagina - 1) * limite;
+  async listarTransferencias({ codigoIBGE, ano, pagina = 1, limite = 20 }: { codigoIBGE: string, ano: number, pagina?: number, limite?: number }): Promise<{ rows: any[], total: number }> {
+    const skip = (pagina - 1) * limite;
 
-    const countQuery = 'SELECT COUNT(*) FROM fns_transferencias WHERE codigo_ibge = $1 AND ano = $2';
-    const dataQuery = `
-      SELECT * FROM fns_transferencias 
-      WHERE codigo_ibge = $1 AND ano = $2 
-      ORDER BY valor DESC 
-      LIMIT $3 OFFSET $4
-    `;
+    const [total, rows] = await Promise.all([
+      prisma.fNSTransferencia.count({ where: { codigoIbge: codigoIBGE, ano } }),
+      prisma.fNSTransferencia.findMany({
+        where: { codigoIbge: codigoIBGE, ano },
+        orderBy: { valor: 'desc' },
+        skip,
+        take: limite,
+      }),
+    ]);
 
-    const total = await db.query(countQuery, [codigoIBGE, ano]);
-    const { rows } = await db.query(dataQuery, [codigoIBGE, ano, limite, offset]);
-
-    return { rows, total: parseInt(total.rows[0].count) };
+    return { rows, total };
   }
 
   async resumoMunicipio(codigoIBGE: string, ano: number): Promise<any[]> {
-    const query = `
-      SELECT bloco, SUM(valor) as total 
-      FROM fns_transferencias 
-      WHERE codigo_ibge = $1 AND ano = $2 
-      GROUP BY bloco
-      ORDER BY total DESC
-    `;
-    const { rows } = await db.query(query, [codigoIBGE, ano]);
-    return rows;
+    const aggregations = await prisma.fNSTransferencia.groupBy({
+      by: ['bloco'],
+      where: { codigoIbge: codigoIBGE, ano },
+      _sum: { valor: true },
+      orderBy: { _sum: { valor: 'desc' } },
+    });
+
+    return aggregations.map(a => ({
+      bloco: a.bloco,
+      total: a._sum.valor || 0
+    }));
   }
 
-  async listarConvenios({ ano, situacao, pagina = 1, limite = 20 }: { ano: number, situacao?: string, pagina?: number, limite?: number }): Promise<{ rows: ConvenioFNS[], total: number }> {
-    const offset = (pagina - 1) * limite;
-    let where = 'WHERE EXTRACT(YEAR FROM data_inicio) = $1';
-    let params: (string | number)[] = [ano];
+  async listarConvenios({ ano, situacao, pagina = 1, limite = 20 }: { ano: number, situacao?: string, pagina?: number, limite?: number }): Promise<{ rows: any[], total: number }> {
+    const skip = (pagina - 1) * limite;
+    
+    const where: any = {
+      dataInicio: {
+        gte: new Date(`${ano}-01-01`),
+        lte: new Date(`${ano}-12-31`),
+      }
+    };
 
     if (situacao) {
-      where += ' AND situacao ILIKE $2';
-      params.push(`%${situacao}%`);
+      where.situacao = { contains: situacao, mode: 'insensitive' };
     }
 
-    const countQuery = `SELECT COUNT(*) FROM fns_convenios ${where}`;
-    const dataQuery = `
-      SELECT * FROM fns_convenios 
-      ${where} 
-      ORDER BY data_inicio DESC 
-      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
-    `;
+    const [total, rows] = await Promise.all([
+      prisma.fNSConvenio.count({ where }),
+      prisma.fNSConvenio.findMany({
+        where,
+        orderBy: { dataInicio: 'desc' },
+        skip,
+        take: limite,
+      }),
+    ]);
 
-    const total = await db.query(countQuery, params);
-    const { rows } = await db.query(dataQuery, [...params, limite, offset]);
-
-    return { rows, total: parseInt(total.rows[0].count) };
+    return { rows, total };
   }
 }
 

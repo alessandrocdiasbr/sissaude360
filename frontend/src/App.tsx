@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 're
 import Dashboard from './pages/Dashboard';
 import AtencaoPrimaria from './pages/AtencaoPrimaria';
 import GestaoFinanceira from './pages/GestaoFinanceira';
-import GestaoAlmoxarifado from './pages/GestaoAlmoxarifado';
 import GestaoPessoas from './pages/GestaoPessoas';
 import GestaoFila from './pages/GestaoFila';
 import AdminPlanejamento from './pages/AdminPlanejamento';
@@ -33,9 +32,9 @@ function AppContent() {
         <aside className="w-64 bg-slate-900 text-slate-300 p-6 flex flex-col hidden lg:flex border-r border-slate-800">
           <div className="flex items-center gap-3 mb-10 px-2">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-600/20">
-              <span className="text-white font-bold text-lg">SB</span>
+              <span className="text-white font-bold text-lg">MS</span>
             </div>
-            <span className="font-bold text-white text-xl tracking-tight">Brasil 360</span>
+            <span className="font-bold text-white text-xl tracking-tight">Monitora Saúde</span>
           </div>
 
           <nav className="flex-1 space-y-1">
@@ -77,7 +76,7 @@ function AppContent() {
             <NavItem
               to="/fila"
               icon={<List size={20} />}
-              label="Gestão de Fila"
+              label="Regulação / Fila"
               active={location.pathname === '/fila'}
             />
             <NavItem
@@ -133,7 +132,7 @@ function AppContent() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/aps" element={<AtencaoPrimaria />} />
               <Route path="/financeiro" element={<GestaoFinanceira />} />
-              <Route path="/almoxarifado" element={<GestaoAlmoxarifado />} />
+              <Route path="/almoxarifado" element={<Almoxarifado />} />
               <Route path="/almoxarifado-novo" element={<Almoxarifado />} />
               <Route path="/pessoas" element={<GestaoPessoas />} />
               <Route path="/fila" element={<GestaoFila />} />
@@ -149,13 +148,19 @@ function AppContent() {
   );
 }
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient();
+
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
 

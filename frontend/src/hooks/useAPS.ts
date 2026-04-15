@@ -1,39 +1,58 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { criarProducao, getDashboard, getIndicadores, getUnidades } from '../services/apsApi';
-import type { ProducaoPayload } from '../types/aps';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apsService } from '../services/apsService';
 
-export const useUnidades = () => {
-  return useQuery({
-    queryKey: ['aps', 'unidades'],
-    queryFn: getUnidades,
-    staleTime: 1000 * 60 * 60, // 1 hora
-  });
-};
-
-export const useIndicadores = () => {
+export const useIndicadoresAPS = () => {
   return useQuery({
     queryKey: ['aps', 'indicadores'],
-    queryFn: getIndicadores,
-    staleTime: 1000 * 60 * 60, // 1 hora
+    queryFn: apsService.getIndicadores,
+    staleTime: 10 * 60 * 1000, // 10 minutos
   });
 };
 
-export const useDashboard = (unidadeId?: string, indicadorId?: string) => {
+export const useUnidadesAPS = () => {
   return useQuery({
-    queryKey: ['aps', 'dashboard', unidadeId, indicadorId],
-    queryFn: () => getDashboard(unidadeId, indicadorId),
-    staleTime: 1000 * 60 * 15, // 15 minutos
+    queryKey: ['aps', 'unidades'],
+    queryFn: apsService.getUnidades,
+    staleTime: 10 * 60 * 1000,
+  });
+};
+
+export const useResultadoPorIndicador = (params: { indicadorId: string; mes: number; ano: number; tipos: string }, enabled: boolean) => {
+  return useQuery({
+    queryKey: ['aps', 'resultado-indicador', params],
+    queryFn: () => apsService.getResultadoPorIndicador(params),
+    enabled,
+    refetchOnWindowFocus: false,
+  });
+};
+
+export const useResultadoPorEquipe = (params: { unidadeId: string; mes: number; ano: number }, enabled: boolean) => {
+  return useQuery({
+    queryKey: ['aps', 'resultado-equipe', params],
+    queryFn: () => apsService.getResultadoPorEquipe(params),
+    enabled,
+    refetchOnWindowFocus: false,
+  });
+};
+
+export const useEvolucaoAPS = (params: { indicadorId: string; tipos: string; meses?: number }, enabled: boolean) => {
+  return useQuery({
+    queryKey: ['aps', 'evolucao', params],
+    queryFn: () => apsService.getEvolucao(params),
+    enabled,
+    refetchOnWindowFocus: false,
   });
 };
 
 export const useCriarProducao = () => {
   const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: (dados: ProducaoPayload) => criarProducao(dados),
-    onSuccess: async () => {
-      // Invalida todos os dashboards (com ou sem filtros)
-      await queryClient.invalidateQueries({ queryKey: ['aps', 'dashboard'] });
+    mutationFn: apsService.criarProducao,
+    onSuccess: () => {
+      // Invalida as queries de resultado para forçar atualização
+      queryClient.invalidateQueries({ queryKey: ['aps', 'resultado-indicador'] });
+      queryClient.invalidateQueries({ queryKey: ['aps', 'resultado-equipe'] });
+      queryClient.invalidateQueries({ queryKey: ['aps', 'evolucao'] });
     },
   });
 };

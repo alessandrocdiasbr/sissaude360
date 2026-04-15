@@ -1,80 +1,76 @@
 import axios from 'axios';
-import type {
-  EstatisticasDiaResponse,
-  GerarSenhaPayload,
-  ListaFilaResponse,
-  ListaSalasResponse,
-  Ticket,
-} from '../types/fila';
+import type { FilaParams, SolicitacaoFila, EstatisticasFilaResponse, CategoriaFila, ProcedimentoFila } from '../types/fila';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const TOKEN_KEY = 'sissaude360_token';
+
+const getAuthHeader = () => {
+    const storedData = localStorage.getItem(TOKEN_KEY);
+    if (storedData) {
+        try {
+            const { token } = JSON.parse(storedData);
+            return { Authorization: `Bearer ${token}` };
+        } catch (e) {
+            return {};
+        }
+    }
+    return {};
+};
 
 const filaApi = axios.create({
-  baseURL: API_URL,
+    baseURL: `${API_URL}/fila`,
+    headers: {
+        'Content-Type': 'application/json',
+    },
 });
 
+// Interceptor para adicionar o token em todas as requisições
 filaApi.interceptors.request.use((config) => {
-  try {
-    const sessionData = localStorage.getItem('sissaude360_token');
-    if (sessionData && config.headers) {
-      const { token } = JSON.parse(sessionData) as { token?: string };
-      if (token) config.headers['Authorization'] = `Bearer ${token}`;
+    const headers = getAuthHeader();
+    if (headers.Authorization) {
+        config.headers.Authorization = headers.Authorization;
     }
-  } catch {
-    // ignore
-  }
-  return config;
+    return config;
 });
 
-filaApi.interceptors.response.use(
-  (r) => r,
-  (error) => {
-    const status: number | undefined = error?.response?.status;
-    if (status === 401 || status === 403) {
-      try {
-        localStorage.removeItem('sissaude360_token');
-      } finally {
-        window.location.href = '/login';
-      }
-    }
-    return Promise.reject(error);
-  }
-);
-
-export const listarFila = async (unidadeId: string): Promise<ListaFilaResponse> => {
-  const response = await filaApi.get(`/fila/${unidadeId}`);
-  return response.data;
+export const getSolicitacoes = async (params: FilaParams) => {
+    const { data } = await filaApi.get('/', { params });
+    return data;
 };
 
-export const listarSalas = async (unidadeId: string): Promise<ListaSalasResponse> => {
-  const response = await filaApi.get(`/fila/${unidadeId}/salas`);
-  return response.data;
+export const getSolicitacao = async (id: string): Promise<SolicitacaoFila> => {
+    const { data } = await filaApi.get(`/${id}`);
+    return data;
 };
 
-export const estatisticasDia = async (unidadeId: string): Promise<EstatisticasDiaResponse> => {
-  const response = await filaApi.get(`/fila/${unidadeId}/estatisticas-dia`);
-  return response.data;
+export const getEstatisticasFila = async (): Promise<EstatisticasFilaResponse> => {
+    const { data } = await filaApi.get('/estatisticas');
+    return data;
 };
 
-export const gerarSenha = async (payload: GerarSenhaPayload): Promise<Ticket> => {
-  const response = await filaApi.post('/fila/tickets', payload);
-  return response.data;
+export const getCategorias = async (): Promise<CategoriaFila[]> => {
+    const { data } = await filaApi.get('/categorias');
+    return data;
 };
 
-export const chamarProximo = async (salaId: string): Promise<Ticket> => {
-  const response = await filaApi.post(`/fila/salas/${salaId}/chamar-proximo`);
-  return response.data;
+export const getProcedimentos = async (subCategoriaId?: string): Promise<ProcedimentoFila[]> => {
+    const { data } = await filaApi.get('/procedimentos', { params: { subCategoriaId } });
+    return data;
 };
 
-export const iniciarAtendimento = async (ticketId: string): Promise<Ticket> => {
-  const response = await filaApi.post(`/fila/tickets/${ticketId}/iniciar`);
-  return response.data;
+export const criarSolicitacao = async (payload: any): Promise<SolicitacaoFila> => {
+    const { data } = await filaApi.post('/', payload);
+    return data;
 };
 
-export const finalizarAtendimento = async (ticketId: string): Promise<Ticket> => {
-  const response = await filaApi.post(`/fila/tickets/${ticketId}/finalizar`);
-  return response.data;
+export const atualizarStatus = async (id: string, payload: { novoStatus: string; observacao?: string; motivoCancelamento?: string; dataAgendamento?: string }) => {
+    const { data } = await filaApi.patch(`/${id}/status`, payload);
+    return data;
+};
+
+export const atualizarSolicitacao = async (id: string, payload: any) => {
+    const { data } = await filaApi.put(`/${id}`, payload);
+    return data;
 };
 
 export default filaApi;
-

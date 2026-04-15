@@ -50,7 +50,7 @@ export const listUnidades = async (req: Request, res: Response) => {
 
 export const updateUnidade = async (req: Request, res: Response) => {
     try {
-        const { id } = req.params;
+        const id = req.params.id as string;
         const { nome, tipo, endereco, telefone } = req.body;
         const unidade = await prisma.unidade.update({
             where: { id },
@@ -59,8 +59,9 @@ export const updateUnidade = async (req: Request, res: Response) => {
         res.json(unidade);
     } catch (error) {
         try {
+            const id = req.params.id as string;
             const unidade = await prisma.unidade.update({
-                where: { id: req.params.id },
+                where: { id },
                 data: { nome: req.body.nome }
             });
             res.json(unidade);
@@ -72,7 +73,8 @@ export const updateUnidade = async (req: Request, res: Response) => {
 
 export const deleteUnidade = async (req: Request, res: Response) => {
     try {
-        await prisma.unidade.delete({ where: { id: req.params.id } });
+        const id = req.params.id as string;
+        await prisma.unidade.delete({ where: { id } });
         res.json({ message: 'Excluído.' });
     } catch (error) {
         res.status(500).json({ error: 'Erro ao excluir.' });

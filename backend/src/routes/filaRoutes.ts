@@ -1,28 +1,22 @@
 import { Router } from 'express';
+import FilaController from '../controllers/FilaController';
 import { authenticateToken } from '../middlewares/auth';
-import {
-  chamarProximo,
-  estatisticasDia,
-  finalizarAtendimento,
-  gerarSenha,
-  iniciarAtendimento,
-  listarFila,
-  listarSalas,
-} from '../controllers/FilaController';
 
 const router = Router();
 
-// Todas as rotas protegidas
+// Todas as rotas de fila são protegidas
 router.use(authenticateToken);
 
-router.post('/tickets', gerarSenha);
-router.get('/:unidadeId', listarFila);
-router.get('/:unidadeId/salas', listarSalas);
-router.get('/:unidadeId/estatisticas-dia', estatisticasDia);
+// Listagem e Filtros
+router.get('/', FilaController.listarSolicitacoes);
+router.get('/estatisticas', FilaController.estatisticas);
+router.get('/categorias', FilaController.listarCategorias);
+router.get('/procedimentos', FilaController.listarProcedimentos);
 
-router.post('/salas/:salaId/chamar-proximo', chamarProximo);
-router.post('/tickets/:ticketId/iniciar', iniciarAtendimento);
-router.post('/tickets/:ticketId/finalizar', finalizarAtendimento);
+// CRUD de Solicitações
+router.get('/:id', FilaController.buscarSolicitacao);
+router.post('/', FilaController.criarSolicitacao);
+router.put('/:id', FilaController.atualizarSolicitacao);
+router.patch('/:id/status', FilaController.atualizarStatus);
 
 export default router;
-

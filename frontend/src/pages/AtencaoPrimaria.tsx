@@ -1,629 +1,783 @@
-import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
-} from 'recharts';
-import { 
-  ArrowUpRight, 
-  ArrowDownRight, 
-  Grid3X3,
-  TrendingUp,
-  AlertCircle,
-  ArrowLeft,
-  Loader2,
-  Plus,
-  X
+  ArrowLeft, 
+  TrendingUp, 
+  Users, 
+  FileText, 
+  Search, 
+  Info, 
+  ExternalLink, 
+  Plus, 
+  X, 
+  Save, 
+  Loader2, 
+  AlertCircle 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useCriarProducao, useDashboard, useIndicadores, useUnidades } from '../hooks/useAPS';
-import type { Indicador, ProducaoComparativo, ProducaoPayload, Unidade } from '../types/aps';
+import { 
+  ResponsiveContainer, 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip as RechartsTooltip, 
+  Legend 
+} from 'recharts';
+
+import { 
+  useIndicadoresAPS, 
+  useUnidadesAPS, 
+  useResultadoPorIndicador, 
+  useResultadoPorEquipe, 
+  useEvolucaoAPS, 
+  useCriarProducao 
+} from '../hooks/useAPS';
+import type { 
+  ViewAPS, 
+  TipoEquipe, 
+  StatusAPS 
+} from '../services/apsService';
+
+// --- Constantes ---
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
 
 const AtencaoPrimaria = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'individual' | 'overview'>('individual');
-  const [selectedUnidade, setSelectedUnidade] = useState<string>('Todas');
-  const [selectedIndicador, setSelectedIndicador] = useState<string>(''); // Vazio inicialmente para pegar o primeiro da lista
+
+  // --- Estados de Filtro ---
+  const [view, setView] = useState<ViewAPS>('indicador');
+  const [tiposAtivos, setTiposAtivos] = useState<TipoEquipe[]>(['eSF']);
+  const [indicadorId, setIndicadorId] = useState<string>('');
+  const [unidadeId, setUnidadeId] = useState<string>('');
+  const [mes, setMes] = useState<number>(new Date().getMonth() + 1);
+  const [ano, setAno] = useState<number>(new Date().getFullYear());
+  const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Hooks de Dados Reais
-  const { data: unidades = [], isLoading: loadingUnidades } = useUnidades();
-  const { data: indicadores = [], isLoading: loadingIndicadores } = useIndicadores();
-  
-  // Ajustar indicador padrão caso nenhum esteja selecionado
+  // Filtros aplicados (só mudam no clique do botão)
+  const [filtrosAplicados, setFiltrosAplicados] = useState({
+    view: 'indicador',
+    tipos: 'eSF',
+    indicadorId: '',
+    unidadeId: '',
+    mes: new Date().getMonth() + 1,
+    ano: new Date().getFullYear()
+  });
+
+  // --- Dados Base ---
+  const { data: indicadores = [], isLoading: loadingInds } = useIndicadoresAPS();
+  const { data: unidades = [], isLoading: loadingUnits } = useUnidadesAPS();
+
+  // Inicialização de IDs padrão
   useEffect(() => {
-    if (!selectedIndicador && indicadores.length > 0) {
-      setSelectedIndicador(indicadores[0].id);
+    if (indicadores.length > 0 && !indicadorId) {
+      setIndicadorId(indicadores[0].id);
+      setFiltrosAplicados(prev => ({ ...prev, indicadorId: indicadores[0].id }));
     }
-  }, [indicadores, selectedIndicador]);
+  }, [indicadores, indicadorId]);
 
-  const { 
-    data: performanceData, 
-    isLoading: loadingPerformance,
-    isError: errorPerformance,
-    refetch: refetchDashboard
-  } = useDashboard(
-    selectedUnidade === 'Todas' ? undefined : selectedUnidade,
-    selectedIndicador || undefined
-  );
+  useEffect(() => {
+    if (unidades.length > 0 && !unidadeId) {
+      setUnidadeId(unidades[0].id);
+      setFiltrosAplicados(prev => ({ ...prev, unidadeId: unidades[0].id }));
+    }
+  }, [unidades, unidadeId]);
 
-  const currentIndicator = indicadores.find(i => i.id === selectedIndicador);
-  const currentUnidade = unidades.find(u => u.id === selectedUnidade);
+  // --- Queries TanStack ---
+  const resIndicador = useResultadoPorIndicador({
+    indicadorId: filtrosAplicados.indicadorId,
+    mes: filtrosAplicados.mes,
+    ano: filtrosAplicados.ano,
+    tipos: filtrosAplicados.tipos
+  }, filtrosAplicados.view === 'indicador' && !!filtrosAplicados.indicadorId);
 
-  // Valores Consolidados para os Cards do Topo
-  const resumoDashboard = performanceData?.resumo || [];
-  const totalEvolucaoMedia = resumoDashboard.length > 0
-    ? (resumoDashboard.reduce((acc, curr) => acc + parseFloat(curr.evolucao), 0) / resumoDashboard.length).toFixed(1)
-    : '0';
+  const resEquipe = useResultadoPorEquipe({
+    unidadeId: filtrosAplicados.unidadeId,
+    mes: filtrosAplicados.mes,
+    ano: filtrosAplicados.ano
+  }, filtrosAplicados.view === 'equipe' && !!filtrosAplicados.unidadeId);
 
-  if (errorPerformance) {
-    return (
-      <div className="p-8 max-w-7xl mx-auto">
-        <div className="flex flex-col items-center justify-center min-h-[320px] text-slate-500 gap-4 bg-white rounded-3xl border border-slate-100 shadow-sm">
-          <AlertCircle size={48} className="text-red-500" />
-          <h2 className="text-xl font-bold text-slate-800">Não foi possível carregar o dashboard APS</h2>
-          <p className="text-sm text-slate-500 text-center max-w-md">
-            Pode ser instabilidade momentânea no servidor ou sua conexão. Tente novamente.
-          </p>
-          <button
-            onClick={() => void refetchDashboard()}
-            className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold shadow-sm hover:bg-blue-700 transition-colors"
-          >
-            Tentar novamente
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const resEvolucao = useEvolucaoAPS({
+    indicadorId: filtrosAplicados.indicadorId,
+    tipos: filtrosAplicados.tipos,
+    meses: 8
+  }, filtrosAplicados.view === 'competencia' && !!filtrosAplicados.indicadorId);
+
+  // --- Handlers ---
+  const handleAplicarFiltros = () => {
+    setFiltrosAplicados({
+      view,
+      tipos: tiposAtivos.join(','),
+      indicadorId,
+      unidadeId,
+      mes,
+      ano
+    });
+  };
+
+  const toggleTipo = (tipo: TipoEquipe) => {
+    setTiposAtivos(prev => {
+      if (prev.includes(tipo)) {
+        return prev.length > 1 ? prev.filter(t => t !== tipo) : prev;
+      }
+      return [...prev, tipo];
+    });
+  };
+
+  // Gerar opções de competência (últimos 12 meses)
+  const competenciaOptions = useMemo(() => {
+    const options = [];
+    const agora = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
+      const m = d.getMonth() + 1;
+      const a = d.getFullYear();
+      const label = formatCompLabel(m, a);
+      options.push({ m, a, label });
+    }
+    return options;
+  }, []);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 h-full overflow-y-auto">
-      {/* Header & Main Filters */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+    <div className="min-h-screen bg-indigo-50/50 p-6 md:p-8 space-y-8 animate-in fade-in duration-500 pb-20">
+      {/* Top Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="space-y-1">
           <button 
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-slate-500 hover:text-blue-600 transition-colors mb-2 font-medium group"
+            onClick={() => navigate('/')} 
+            className="flex items-center gap-2 text-slate-500 hover:text-blue-600 transition-colors mb-2 font-bold group text-xs uppercase tracking-widest"
           >
-            <ArrowLeft size={18} className="transition-transform group-hover:-translate-x-1" />
-            Voltar ao Hub
+            <ArrowLeft size={16} className="transition-transform group-hover:-translate-x-1" />
+            Voltar ao Menu Principal
           </button>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            Atenção Primária
-          </h1>
-          <p className="text-slate-500">Monitoramento Geral de Indicadores de Saúde</p>
-        </div>
-        
-        <div className="flex gap-3 bg-white p-1.5 rounded-2xl shadow-sm border border-slate-100">
-          <TabButton active={activeTab === 'individual'} onClick={() => setActiveTab('individual')} label="Análise Individual" icon={<TrendingUp size={16} />} />
-          <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} label="Visão Geral Unidade" icon={<Grid3X3 size={16} />} />
+          <div className="flex items-center gap-3">
+             <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <TrendingUp size={24} />
+             </div>
+             <div>
+                <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Atenção Primária</h1>
+                <p className="text-slate-500 text-sm font-medium">Monitoramento de Desempenho e Indicadores Previne Brasil</p>
+             </div>
+          </div>
         </div>
 
-        <div className="flex gap-4 items-end">
-          <FilterSelect 
-            label="Unidade/Equipe" 
-            value={selectedUnidade} 
-            onChange={setSelectedUnidade} 
-            options={[{id: 'Todas', nome: 'Todas as Equipes'}, ...unidades]} 
-            loading={loadingUnidades}
-          />
-          {activeTab === 'individual' && (
-            <FilterSelect 
-              label="Indicador Principal" 
-              value={selectedIndicador} 
-              onChange={setSelectedIndicador} 
-              options={indicadores} 
-              loading={loadingIndicadores}
-            />
-          )}
-
-          <button
+        <div className="flex items-center gap-4">
+          <button 
             onClick={() => setIsModalOpen(true)}
-            className="h-[42px] px-4 rounded-xl bg-slate-900 text-white font-bold text-sm shadow-sm hover:bg-slate-800 transition-colors flex items-center gap-2"
+            className="flex items-center gap-3 px-6 py-4 bg-slate-900 text-white rounded-[1.25rem] font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-95 border-b-4 border-slate-700"
           >
-            <Plus size={16} />
-            Lançar Produção
+            <Plus size={18} /> Lançar Produção
           </button>
         </div>
       </div>
 
-      {loadingPerformance ? (
-        <LoadingSkeleton />
-      ) : activeTab === 'individual' ? (
-        <IndividualView 
-          data={resumoDashboard} 
-          indicatorName={currentIndicator?.nome || 'Nenhum Selecionado'}
-          indicador={currentIndicator}
-          evolution={totalEvolucaoMedia} 
-        />
-      ) : (
-        <OverviewView 
-          unidadeName={currentUnidade?.nome || 'Todas as Unidades'} 
-          resumo={resumoDashboard} 
-          indicadores={indicadores}
-        />
-      )}
-
-      <LancarProducaoModal
-        open={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        indicadores={indicadores}
-        unidades={unidades}
-        defaultIndicadorId={selectedIndicador}
-        defaultUnidadeId={selectedUnidade === 'Todas' ? '' : selectedUnidade}
-        onSuccess={() => {
-          setIsModalOpen(false);
-          void refetchDashboard();
-        }}
-      />
-    </div>
-  );
-};
-
-// --- Sub-Views ---
-
-type IndividualViewProps = {
-  data: ProducaoComparativo[];
-  indicatorName: string;
-  evolution: string;
-  indicador?: Indicador;
-};
-
-const IndividualView = ({ data, indicatorName, evolution, indicador }: IndividualViewProps) => (
-  <>
-    {/* Stats Overview */}
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <Card
-        title={`${indicatorName} (2026)`}
-        value={typeof data[0]?.valor2026 === 'number' ? `${data[0].valor2026}%` : 'N/A'}
-        status={indicador ? getStatusLabelByScore(data[0]?.valor2026 ?? null, indicador) : (data[0]?.status2026 || 'Pendente')}
-        evolution={`${evolution}%`}
-        up={parseFloat(evolution) >= 0}
-      />
-      <Card title="Crescimento Médio" value={`${evolution}%`} status={parseFloat(evolution) > 0 ? 'Bom' : 'Regular'} evolution={`${evolution}%`} up={parseFloat(evolution) >= 0} />
-      <Card title="Qtde Indicadores" value={data.length} status="Análise" evolution="Ativos" up />
-      <Card title="Status do Ciclo" value="Em Foco" status="Suficiente" evolution="Ciclo 2026" up />
-    </div>
-
-    {/* Main Charts area */}
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 dashboard-card !p-8">
-        <div className="flex justify-between items-center mb-8">
-          <h3 className="font-bold text-lg text-slate-800">Comparativo Anual: {indicatorName}</h3>
-          <div className="flex gap-4 text-xs font-medium">
-            <LegendItem color="bg-blue-500" label="2026" />
-            <LegendItem color="bg-slate-300" label="2025" />
-          </div>
+      {/* Main Container */}
+      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-2xl shadow-indigo-500/5 overflow-hidden">
+        {/* Navigation Tabs */}
+        <div className="bg-slate-50 border-b border-slate-200 p-2 flex gap-2">
+          <TabLink active={view === 'competencia'} onClick={() => setView('competencia')} icon={<TrendingUp size={18} />} label="Visão por Competência" />
+          <TabLink active={view === 'equipe'} onClick={() => setView('equipe')} icon={<Users size={18} />} label="Visão por Equipe" />
+          <TabLink active={view === 'indicador'} onClick={() => setView('indicador')} icon={<FileText size={18} />} label="Visão por Indicador" />
         </div>
-        
-        <div className="h-[400px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
-              <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-              <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-              <Bar dataKey="valor2025" name="2025" fill="#e2e8f0" radius={[4, 4, 0, 0]} barSize={34} />
-              <Bar dataKey="valor2026" name="2026" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={34} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
 
-      <div className="dashboard-card border-l-4 border-l-blue-500 flex flex-col">
-        <h3 className="font-bold text-lg text-slate-800 mb-6 flex items-center gap-2">
-          <AlertCircle size={20} className="text-blue-500" /> Análise de Gestão
-        </h3>
-        <div className="space-y-6 flex-1 text-slate-600 font-medium">
-          <div className="p-4 bg-blue-50 rounded-xl">
-            <p className="text-sm text-blue-800 leading-relaxed">
-              Baseado nos dados reais do <strong>e-SUS</strong>, o desempenho global para <strong>{indicatorName}</strong> reflete a produção consolidada das equipes.
-            </p>
-          </div>
-          
-          <div className="space-y-4">
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Ações Recomendadas</h4>
-            <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg text-xs leading-relaxed">
-              • Intensificar as buscas ativas conforme cronograma.<br/><br/>
-              • Validar as fichas de atendimento no PEC para garantir o processamento correto.
+        {/* Filters Panel */}
+        <div className="p-8 border-b border-slate-100 flex flex-col lg:flex-row items-end gap-6 bg-white">
+          <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Tipo de Equipe Chips */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo de Equipe</label>
+              <div className="flex gap-2">
+                <TipoChip active={tiposAtivos.includes('eSF')} onClick={() => toggleTipo('eSF')} label="eSF" />
+                <TipoChip active={tiposAtivos.includes('eAP')} onClick={() => toggleTipo('eAP')} label="eAP" />
+              </div>
+            </div>
+
+            {/* Condições Select (Fixo) */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Condição</label>
+              <select className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-4 font-bold text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all cursor-pointer">
+                <option>Somente equipes homologadas</option>
+              </select>
+            </div>
+
+            {/* Indicador Select (Só visões Ind/Comp) */}
+            <div className={`space-y-2 transition-opacity ${view === 'equipe' ? 'opacity-30 pointer-events-none' : ''}`}>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Indicador de Saúde</label>
+              <select 
+                value={indicadorId}
+                onChange={e => setIndicadorId(e.target.value)}
+                className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-4 font-bold text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all cursor-pointer truncate"
+              >
+                {indicadores.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+              </select>
+            </div>
+
+            {/* Equipe/Competência dependente da visão */}
+            <div className="space-y-2">
+              {view === 'equipe' ? (
+                <>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Equipe de Saúde</label>
+                  <select 
+                    value={unidadeId}
+                    onChange={e => setUnidadeId(e.target.value)}
+                    className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-4 font-bold text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all cursor-pointer"
+                  >
+                    {unidades.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                  </select>
+                </>
+              ) : (
+                <>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mês de Referência</label>
+                  <select 
+                    value={`${mes}-${ano}`}
+                    onChange={e => {
+                      const [m, a] = e.target.value.split('-').map(Number);
+                      setMes(m); setAno(a);
+                    }}
+                    className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-4 font-bold text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all cursor-pointer"
+                  >
+                    {competenciaOptions.map(opt => <option key={opt.label} value={`${opt.m}-${opt.a}`}>{opt.label}</option>)}
+                  </select>
+                </>
+              )}
             </div>
           </div>
+
+          <button 
+            onClick={handleAplicarFiltros}
+            className="px-8 h-12 bg-blue-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.15em] hover:bg-blue-800 transition-all shadow-lg shadow-blue-500/10 active:scale-95 min-w-[150px]"
+          >
+            Aplicar Filtros
+          </button>
         </div>
+
+        {/* Results Panel */}
+        <div className="p-8 space-y-8">
+          {/* Result Header */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-50 pb-6">
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Resultado</h2>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
+                {filtrosAplicados.view === 'indicador' && (
+                  <>
+                    <p className="text-sm font-medium text-slate-500">Indicador: <span className="text-slate-900 font-bold">{indicadores.find(i => i.id === filtrosAplicados.indicadorId)?.nome}</span></p>
+                    <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                    <p className="text-sm font-medium text-slate-500">Mês: <span className="text-slate-900 font-bold">{formatCompLabel(filtrosAplicados.mes, filtrosAplicados.ano)}</span></p>
+                  </>
+                )}
+                {filtrosAplicados.view === 'equipe' && (
+                  <p className="text-sm font-medium text-slate-500">Equipe: <span className="text-slate-900 font-bold">{unidades.find(u => u.id === filtrosAplicados.unidadeId)?.nome}</span></p>
+                )}
+                <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                <p className="text-sm font-medium text-slate-500 text-nowrap">Tipos: <span className="text-slate-900 font-bold">{filtrosAplicados.tipos}</span></p>
+                
+                {(resIndicador.data?.isPreliminar || resEquipe.data?.isPreliminar || resEvolucao.data?.isPreliminar) && (
+                  <span className="ml-2 px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-widest rounded-full flex items-center gap-1.5">
+                    <Info size={12} /> Dado Preliminar
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {filtrosAplicados.view === 'indicador' && (
+              <div className="relative w-full md:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <input 
+                  type="text" 
+                  placeholder="Pesquisar equipe..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full h-11 bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 font-bold text-sm outline-none focus:ring-4 focus:ring-blue-500/5"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Dynamic Content */}
+          <div className="min-h-[400px]">
+            {view === 'indicador' && (
+              <ResultIndicador 
+                loading={resIndicador.isLoading} 
+                error={resIndicador.isError} 
+                data={resIndicador.data} 
+                search={search} 
+              />
+            )}
+            {view === 'equipe' && (
+              <ResultEquipe 
+                loading={resEquipe.isLoading} 
+                error={resEquipe.isError} 
+                data={resEquipe.data} 
+              />
+            )}
+            {view === 'competencia' && (
+              <ResultEvolucao 
+                loading={resEvolucao.isLoading} 
+                error={resEvolucao.isError} 
+                data={resEvolucao.data} 
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Footer Score Panel */}
+        <ScorePanel 
+          indicador={indicadores.find(i => i.id === filtrosAplicados.indicadorId)} 
+        />
       </div>
+
+      <LancarProducaoModal 
+        open={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        indicadores={indicadores}
+        unidades={unidades}
+      />
     </div>
-  </>
-);
-
-type OverviewViewProps = {
-  unidadeName: string;
-  resumo: ProducaoComparativo[];
-  indicadores: Indicador[];
-};
-
-const OverviewView = ({ unidadeName, resumo, indicadores }: OverviewViewProps) => {
-  // Consolida por indicador (média dos meses do ano 2025/2026)
-  const rows = useMemo(() => {
-    type Acc = { indicador: string; sum2025: number; cnt2025: number; sum2026: number; cnt2026: number; evolucaoSum: number; evolucaoCnt: number };
-    const acc = new Map<string, Acc>();
-
-    for (const item of resumo) {
-      const key = item.indicador;
-      const prev = acc.get(key) ?? { indicador: key, sum2025: 0, cnt2025: 0, sum2026: 0, cnt2026: 0, evolucaoSum: 0, evolucaoCnt: 0 };
-
-      prev.sum2025 += item.valor2025;
-      prev.cnt2025 += 1;
-
-      if (typeof item.valor2026 === 'number') {
-        prev.sum2026 += item.valor2026;
-        prev.cnt2026 += 1;
-      }
-
-      const e = Number(item.evolucao);
-      if (!Number.isNaN(e)) {
-        prev.evolucaoSum += e;
-        prev.evolucaoCnt += 1;
-      }
-
-      acc.set(key, prev);
-    }
-
-    const result = Array.from(acc.values()).map((a) => {
-      const valor2025 = a.cnt2025 ? a.sum2025 / a.cnt2025 : 0;
-      const valor2026 = a.cnt2026 ? a.sum2026 / a.cnt2026 : null;
-      const evolucao = a.evolucaoCnt ? a.evolucaoSum / a.evolucaoCnt : 0;
-
-      const indicador = indicadores.find((i) => i.nome === a.indicador);
-      const status2026 = indicador ? getStatusLabelByScore(valor2026, indicador) : (valor2026 === null ? 'Pendente' : 'Suficiente');
-
-      return { indicador: a.indicador, valor2025, valor2026, evolucao, status2026 };
-    });
-
-    return result.sort((a, b) => a.indicador.localeCompare(b.indicador));
-  }, [resumo, indicadores]);
-
-  return (
-  <div className="dashboard-card !p-0 overflow-hidden">
-    <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-      <h3 className="font-bold text-lg text-slate-800">Visão Geral: {unidadeName}</h3>
-      <p className="text-sm text-slate-500">Comparativo consolidado de indicadores reais para esta visão.</p>
-    </div>
-    <div className="overflow-x-auto">
-      <table className="w-full text-left">
-        <thead>
-          <tr className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">
-            <th className="px-6 py-4">Indicador</th>
-            <th className="px-6 py-4">Status 2026</th>
-            <th className="px-6 py-4">Valor 2025</th>
-            <th className="px-6 py-4">Valor 2026</th>
-            <th className="px-6 py-4">Variação (%)</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100 text-sm">
-          {rows.map((item) => (
-            <tr key={item.indicador} className="hover:bg-slate-50/50 transition-colors">
-              <td className="px-6 py-4 font-semibold text-slate-800">{item.indicador}</td>
-              <td className="px-6 py-4">
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${getStatusClass(item.status2026)}`}>
-                  {item.status2026}
-                </span>
-              </td>
-              <td className="px-6 py-4 text-slate-500">{item.valor2025.toFixed(1)}%</td>
-              <td className="px-6 py-4 font-bold text-slate-900">{item.valor2026 === null ? 'N/A' : `${item.valor2026.toFixed(1)}%`}</td>
-              <td className={`px-6 py-4 font-bold ${item.evolucao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {item.evolucao >= 0 ? '+' : ''}{item.evolucao.toFixed(1)}%
-              </td>
-            </tr>
-          ))}
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">Nenhum dado de produção encontrado para os filtros selecionados.</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  </div>
   );
 };
 
-// --- Helpers & UI Components ---
+// --- Sub-Components ---
 
-type CardProps = {
-  title: string;
-  value: string | number;
-  status: string;
-  evolution: string;
-  up: boolean;
-};
-
-const Card = ({ title, value, status, evolution, up }: CardProps) => (
-  <div className="dashboard-card group hover:scale-[1.02] transition-all">
-    <div className="flex justify-between items-start mb-4">
-      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{title}</span>
-      <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${getStatusClass(status)}`}>
-        {status}
-      </div>
-    </div>
-    <div className="flex items-baseline gap-2">
-      <h2 className="text-3xl font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{value}</h2>
-      <div className={`flex items-center text-sm font-semibold ${up ? 'text-green-600' : 'text-red-600'}`}>
-        {up ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
-        {evolution}
-      </div>
-    </div>
-  </div>
-);
-
-type SelectOption = { id: string; nome: string };
-type FilterSelectProps = {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: SelectOption[];
-  loading?: boolean;
-};
-
-const FilterSelect = ({ label, value, onChange, options, loading }: FilterSelectProps) => (
-  <div className="flex flex-col gap-1.5 min-w-[180px]">
-    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">{label}</label>
-    <div className="relative">
-      <select 
-        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none shadow-sm transition-all appearance-none cursor-pointer disabled:opacity-50"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={loading}
-      >
-        {options.map((o) => (
-          <option key={o.id} value={o.id}>{o.nome}</option>
-        ))}
-      </select>
-      {loading && (
-        <div className="absolute inset-y-0 right-3 flex items-center">
-          <Loader2 className="animate-spin text-slate-400" size={16} />
-        </div>
-      )}
-    </div>
-  </div>
-);
-
-type TabButtonProps = {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  icon: React.ReactElement;
-};
-
-const TabButton = ({ active, onClick, label, icon }: TabButtonProps) => (
+const TabLink = ({ active, onClick, icon, label }: any) => (
   <button 
     onClick={onClick}
-    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-      active ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
-    }`}
+    className={`flex items-center gap-3 px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-tighter transition-all ${active ? 'bg-white text-blue-600 shadow-sm border border-slate-200 ring-4 ring-slate-100' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
   >
-    {icon}
+    {icon} {label}
+  </button>
+);
+
+const TipoChip = ({ active, onClick, label }: any) => (
+  <button 
+    onClick={onClick}
+    className={`h-10 px-6 rounded-xl font-black text-xs transition-all border-2 ${active ? 'bg-blue-50 border-blue-600 text-blue-700' : 'border-slate-200 text-slate-500 bg-white hover:border-slate-400'}`}
+  >
     {label}
   </button>
 );
 
-type LegendItemProps = { color: string; label: string };
-const LegendItem = ({ color, label }: LegendItemProps) => (
-  <div className="flex items-center gap-2">
-    <div className={`w-3 h-3 ${color} rounded-full shadow-sm`}></div>
-    <span className="text-slate-500">{label}</span>
-  </div>
-);
-
-const getStatusClass = (status: string) => {
-  const s = status.toLowerCase();
-  if (s.includes('ótimo') || s.includes('otimo')) return 'bg-blue-100 text-blue-700';
-  if (s.includes('bom')) return 'bg-green-100 text-green-700';
-  if (s.includes('suficiente')) return 'bg-yellow-100 text-yellow-700';
-  if (s.includes('regular')) return 'bg-red-100 text-red-700';
-  return 'bg-slate-100 text-slate-600';
-};
-
-const getStatusLabelByScore = (score: number | null, indicador: Indicador): string => {
-  if (score === null) return 'Pendente';
-  if (score < indicador.metaRegular) return 'Regular';
-  if (score < indicador.metaBom) return 'Suficiente';
-  if (score < indicador.metaOtimo) return 'Bom';
-  return 'Ótimo';
-};
-
-const LoadingSkeleton = () => (
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-    {Array.from({ length: 3 }).map((_, i) => (
-      <div
-        key={i}
-        className="h-28 rounded-2xl bg-slate-200/60 animate-pulse"
-      />
-    ))}
-  </div>
-);
-
-type LancarProducaoModalProps = {
-  open: boolean;
-  onClose: () => void;
-  indicadores: Indicador[];
-  unidades: Unidade[];
-  defaultIndicadorId?: string;
-  defaultUnidadeId?: string;
-  onSuccess: () => void;
-};
-
-const LancarProducaoModal = ({
-  open,
-  onClose,
-  indicadores,
-  unidades,
-  defaultIndicadorId,
-  defaultUnidadeId,
-  onSuccess,
-}: LancarProducaoModalProps) => {
-  const { mutateAsync, isPending, isError, error } = useCriarProducao();
-
-  const [indicadorId, setIndicadorId] = useState(defaultIndicadorId ?? '');
-  const [unidadeId, setUnidadeId] = useState(defaultUnidadeId ?? '');
-  const [numerador, setNumerador] = useState('');
-  const [denominador, setDenominador] = useState('');
-  const [mes, setMes] = useState<number>(new Date().getMonth() + 1);
-  const [ano, setAno] = useState<2025 | 2026>(2026);
-
-  useEffect(() => {
-    if (open) {
-      setIndicadorId(defaultIndicadorId ?? '');
-      setUnidadeId(defaultUnidadeId ?? '');
-      setNumerador('');
-      setDenominador('');
-      setMes(new Date().getMonth() + 1);
-      setAno(2026);
-    }
-  }, [open, defaultIndicadorId, defaultUnidadeId]);
-
-  if (!open) return null;
-
-  const canSubmit =
-    indicadorId &&
-    unidadeId &&
-    numerador.trim().length > 0 &&
-    denominador.trim().length > 0 &&
-    Number(denominador) > 0;
-
-  const handleSave = async () => {
-    const payload: ProducaoPayload = {
-      indicadorId,
-      unidadeId,
-      mes,
-      ano,
-      numerador: Number(numerador),
-      denominador: Number(denominador),
-    };
-    await mutateAsync(payload);
-    onSuccess();
-  };
+const ResultIndicador = ({ loading, error, data, search }: any) => {
+  if (loading) return <SkeletonTable />;
+  if (error) return <ErrorCard />;
+  
+  const filteredEquipes = data?.equipes.filter((e: any) => 
+    e.equipe.toLowerCase().includes(search.toLowerCase()) || 
+    e.ubs.toLowerCase().includes(search.toLowerCase())
+  ) || [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Lançar Produção</h3>
-            <p className="text-sm text-slate-500 mt-1">Registre numerador e denominador para calcular a pontuação.</p>
-          </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-50 text-slate-500">
-            <X size={18} />
-          </button>
-        </div>
+    <div className="space-y-4">
+      <div className="overflow-x-auto border border-slate-100 rounded-3xl">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="bg-slate-50 text-[10px] text-slate-400 font-black uppercase tracking-widest border-b border-slate-100">
+              <th className="px-8 py-4 w-[50%]">Unidade e Equipe</th>
+              <th className="px-8 py-4">Status</th>
+              <th className="px-8 py-4 text-right">Pontuação (%)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {filteredEquipes.map((e: any) => (
+              <tr key={e.id} className="hover:bg-indigo-50/20 transition-all group">
+                <td className="px-8 py-5">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-slate-800 uppercase tracking-tighter group-hover:text-blue-600 transition-colors">{e.ubs}</span>
+                    <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mt-0.5">
+                      Equipe: {e.equipe} · <span className="text-blue-500/70">{e.tipo}</span>
+                    </span>
+                  </div>
+                </td>
+                <td className="px-8 py-5">
+                   {e.status ? (
+                     <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${getStatusStyle(e.status)}`}>
+                        {e.status}
+                     </span>
+                   ) : (
+                     <span className="text-slate-300 font-bold text-xs">—</span>
+                   )}
+                </td>
+                <td className={`px-8 py-5 text-right font-black text-lg tabular-nums ${getValueStyle(e.status)}`}>
+                  {e.pontuacao !== null ? e.pontuacao.toFixed(1).replace('.', ',') : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs font-bold text-slate-400">Quantidade de itens: {filteredEquipes.length}</p>
+    </div>
+  );
+};
 
-        <div className="p-6 space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FilterSelect
-              label="Indicador"
-              value={indicadorId}
-              onChange={setIndicadorId}
-              options={indicadores.map((i) => ({ id: i.id, nome: i.nome }))}
-              loading={false}
-            />
-            <FilterSelect
-              label="Unidade"
-              value={unidadeId}
-              onChange={setUnidadeId}
-              options={unidades.map((u) => ({ id: u.id, nome: u.nome }))}
-              loading={false}
-            />
-          </div>
+const ResultEquipe = ({ loading, error, data }: any) => {
+  if (loading) return <SkeletonTable rows={10} />;
+  if (error) return <ErrorCard />;
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <NumberInput label="Numerador" value={numerador} onChange={setNumerador} />
-            <NumberInput label="Denominador" value={denominador} onChange={setDenominador} />
-          </div>
+  return (
+    <div className="space-y-4">
+      <div className="overflow-x-auto border border-slate-100 rounded-3xl">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="bg-slate-50 text-[10px] text-slate-400 font-black uppercase tracking-widest border-b border-slate-100">
+              <th className="px-8 py-4 w-[60%]">Indicador de Saúde</th>
+              <th className="px-8 py-4 text-center">Status</th>
+              <th className="px-8 py-4 text-right">Resultado</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {data?.indicadores.map((ind: any) => (
+              <tr key={ind.id} className="hover:bg-indigo-50/20 transition-all">
+                <td className="px-8 py-5">
+                  <span className="font-black text-slate-900 uppercase tracking-tighter text-sm">{ind.nome}</span>
+                </td>
+                <td className="px-8 py-5 text-center">
+                  {ind.status ? (
+                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${getStatusStyle(ind.status)}`}>
+                      {ind.status}
+                    </span>
+                  ) : <span className="text-slate-300">—</span>}
+                </td>
+                <td className="px-8 py-5 text-right">
+                  <div className="flex flex-col items-end gap-2">
+                    <span className={`font-black text-lg ${getValueStyle(ind.status)} tabular-nums`}>
+                      {ind.pontuacao !== null ? `${ind.pontuacao.toFixed(1).replace('.', ',')}%` : '—'}
+                    </span>
+                    <div className="w-32 bg-slate-100 h-1 rounded-full overflow-hidden">
+                       <div 
+                         className={`h-full transition-all duration-700 ${getBarColor(ind.status)}`} 
+                         style={{ width: `${Math.min(ind.pontuacao || 0, 100)}%` }}
+                       />
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs font-bold text-slate-400">Total de indicadores: {data?.indicadores.length}</p>
+    </div>
+  );
+};
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <MonthSelect value={mes} onChange={setMes} />
-            <YearSelect value={ano} onChange={setAno} />
-          </div>
+const ResultEvolucao = ({ loading, error, data }: any) => {
+  if (loading) return <SkeletonChart />;
+  if (error) return <ErrorCard />;
 
-          {isError && (
-            <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 text-red-700 rounded-2xl text-sm font-medium">
-              <AlertCircle size={18} />
-              <span>Falha ao salvar a produção. {error instanceof Error ? error.message : ''}</span>
+  const chartData = data?.competencias.map((comp: string, idx: number) => {
+     const point: any = { comp };
+     data.series.forEach((s: any) => {
+       point[s.equipe] = s.dados[idx];
+     });
+     return point;
+  }) || [];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center px-4">
+         <div>
+            <h4 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">{data?.indicador.nome}</h4>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[10px] font-bold text-slate-500 px-2 py-0.5 bg-slate-100 rounded">Jul/25 — Fev/26</span>
+              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-tighter">{data?.series.length} Equipes</span>
             </div>
-          )}
-        </div>
-
-        <div className="p-6 border-t border-slate-100 bg-slate-50/40 flex items-center justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-white border border-slate-200">
-            Cancelar
-          </button>
-          <button
-            disabled={!canSubmit || isPending}
-            onClick={handleSave}
-            className="px-4 py-2.5 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-sm hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {isPending ? <Loader2 className="animate-spin" size={16} /> : null}
-            Salvar
-          </button>
-        </div>
+         </div>
+      </div>
+      
+      <div className="h-[320px] w-full pr-4">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="5 5" stroke="#f1f5f9" vertical={false} />
+            <XAxis 
+              dataKey="comp" 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: '700' }} 
+              dy={15}
+            />
+            <YAxis 
+              domain={[0, 100]} 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: '700' }}
+              tickFormatter={(v) => `${v}%`}
+            />
+            <RechartsTooltip content={<CustomTooltip />} />
+            <Legend 
+               verticalAlign="bottom" 
+               height={36} 
+               iconType="circle" 
+               wrapperStyle={{ paddingTop: '20px', fontSize: '10px', textTransform: 'uppercase', fontWeight: 700 }}
+            />
+            {data?.series.map((s: any, idx: number) => (
+              <Line 
+                key={s.unidadeId}
+                type="monotone" 
+                dataKey={s.equipe} 
+                stroke={COLORS[idx % COLORS.length]} 
+                strokeWidth={3} 
+                dot={{ r: 4, strokeWidth: 0, fill: COLORS[idx % COLORS.length] }}
+                activeDot={{ r: 6, strokeWidth: 4, stroke: '#fff' }}
+                animationDuration={1500}
+                connectNulls={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
 };
 
-type NumberInputProps = {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white p-4 rounded-2xl shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-200 min-w-[200px]">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-50 pb-2">{label}</p>
+        <div className="space-y-3">
+          {payload.map((p: any) => (
+            <div key={p.name} className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-tighter truncate max-w-[120px]">{p.name}</span>
+              </div>
+              <span className="text-xs font-black text-slate-900">{p.value?.toFixed(1)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return null;
 };
 
-const NumberInput = ({ label, value, onChange }: NumberInputProps) => (
-  <div className="flex flex-col gap-1.5">
-    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">{label}</label>
-    <input
-      inputMode="decimal"
-      type="number"
-      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none shadow-sm transition-all"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      min={0}
-    />
+const ScorePanel = ({ indicador }: any) => {
+  if (!indicador) return null;
+  
+  return (
+    <div className="p-8 bg-slate-900 text-white flex flex-col md:flex-row items-center justify-between gap-8">
+      <div className="flex items-center gap-4">
+        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+          <Info size={20} className="text-blue-400" />
+        </div>
+        <div>
+          <h4 className="font-black text-xs uppercase tracking-[0.2em] text-blue-400">Escala de Pontuação</h4>
+          <p className="text-lg font-bold tracking-tighter">{indicador.nome}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-1 flex-wrap justify-end gap-x-12 gap-y-4">
+        {indicador.regras?.map((r: any) => (
+          <div key={r.status} className="flex items-center gap-3">
+             <div className={`w-1 h-8 rounded-full ${getScoreBarColor(r.status)}`} />
+             <div>
+               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{r.label}</p>
+               <p className="text-xl font-bold tracking-tighter leading-none">{r.range}</p>
+             </div>
+          </div>
+        ))}
+      </div>
+
+      <a 
+        href="https://sisaps.saude.gov.br/painelsaps/" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white flex items-center gap-2 transition-all group"
+      >
+        <ExternalLink size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+        Fonte: SIAPS Oficial
+      </a>
+    </div>
+  );
+};
+
+// --- Modais ---
+
+const LancarProducaoModal = ({ open, onClose, indicadores, unidades }: any) => {
+  const { mutateAsync, isPending } = useCriarProducao();
+  const [formData, setFormData] = useState({
+    indicadorId: '',
+    unidadeId: '',
+    mes: new Date().getMonth() + 1,
+    ano: 2026,
+    numerador: '',
+    denominador: ''
+  });
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.indicadorId || !formData.unidadeId || !formData.numerador) return;
+
+    try {
+      await mutateAsync({
+        ...formData,
+        numerador: Number(formData.numerador),
+        denominador: Number(formData.denominador) || 1
+      });
+      onClose();
+    } catch (e) {
+      alert('Erro ao salvar produção');
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+           <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
+                 <Plus size={20} />
+              </div>
+              <h3 className="font-black text-slate-900 uppercase tracking-tighter text-lg">Lançar Produção</h3>
+           </div>
+           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-all text-slate-400">
+              <X size={20} />
+           </button>
+        </div>
+
+        <form onSubmit={handleSave} className="p-10 space-y-6">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1.5 col-span-2">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Indicador</label>
+                 <select 
+                    required
+                    value={formData.indicadorId}
+                    onChange={e => setFormData({...formData, indicadorId: e.target.value})}
+                    className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-5 font-bold text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10"
+                 >
+                    <option value="">Selecione o indicador...</option>
+                    {indicadores.map((i: any) => <option key={i.id} value={i.id}>{i.nome}</option>)}
+                 </select>
+              </div>
+
+              <div className="space-y-1.5 col-span-2">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Unidade de Lotação</label>
+                 <select 
+                    required
+                    value={formData.unidadeId}
+                    onChange={e => setFormData({...formData, unidadeId: e.target.value})}
+                    className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-5 font-bold text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10"
+                 >
+                    <option value="">Selecione a unidade...</option>
+                    {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                 </select>
+              </div>
+
+              <div className="space-y-1.5">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Numerador</label>
+                 <input 
+                    required
+                    type="number"
+                    value={formData.numerador}
+                    onChange={e => setFormData({...formData, numerador: e.target.value})}
+                    className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-5 font-bold text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10"
+                    placeholder="Ex: 154"
+                 />
+              </div>
+
+              <div className="space-y-1.5">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Denominador</label>
+                 <input 
+                    type="number"
+                    value={formData.denominador}
+                    onChange={e => setFormData({...formData, denominador: e.target.value})}
+                    className="w-full h-14 bg-slate-50 border border-slate-200 rounded-2xl px-5 font-bold text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10"
+                    placeholder="Ex: 500"
+                 />
+              </div>
+           </div>
+
+           <div className="flex gap-4 pt-4">
+              <button type="button" onClick={onClose} className="flex-1 h-14 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all text-xs">Cancelar</button>
+              <button 
+                type="submit" 
+                disabled={isPending}
+                className="flex-1 h-14 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20 text-xs flex items-center justify-center gap-2"
+              >
+                {isPending ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                Salvar Produção
+              </button>
+           </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// --- Helpers ---
+
+const formatCompLabel = (m: number, a: number) => {
+  const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  return `${meses[m-1]}/${String(a).slice(2)}`;
+};
+
+const getStatusStyle = (status: StatusAPS) => {
+  switch (status) {
+    case 'OTIMO': return 'bg-blue-100 text-blue-700 ring-2 ring-blue-500/20';
+    case 'BOM': return 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-500/20';
+    case 'SUFICIENTE': return 'bg-amber-100 text-amber-700 ring-2 ring-amber-500/20';
+    case 'REGULAR': return 'bg-rose-100 text-rose-700 ring-2 ring-rose-500/20';
+    default: return 'bg-slate-100 text-slate-500';
+  }
+};
+
+const getValueStyle = (status: StatusAPS) => {
+  switch (status) {
+    case 'OTIMO': return 'text-blue-700';
+    case 'BOM': return 'text-emerald-700';
+    case 'SUFICIENTE': return 'text-amber-700';
+    case 'REGULAR': return 'text-rose-600';
+    default: return 'text-slate-400';
+  }
+};
+
+const getBarColor = (status: StatusAPS) => {
+  switch (status) {
+    case 'OTIMO': return 'bg-blue-600';
+    case 'BOM': return 'bg-emerald-600';
+    case 'SUFICIENTE': return 'bg-amber-500';
+    case 'REGULAR': return 'bg-rose-500';
+    default: return 'bg-slate-200';
+  }
+};
+
+const getScoreBarColor = (status: StatusAPS) => {
+  switch (status) {
+    case 'OTIMO': return 'bg-blue-500';
+    case 'BOM': return 'bg-emerald-500';
+    case 'SUFICIENTE': return 'bg-amber-400';
+    case 'REGULAR': return 'bg-rose-500';
+    default: return 'bg-slate-500';
+  }
+};
+
+// --- Skeletons ---
+
+const SkeletonTable = ({ rows = 5 }: { rows?: number }) => (
+  <div className="space-y-4 animate-pulse">
+    <div className="h-10 bg-slate-100 rounded-xl" />
+    {Array.from({ length: rows }).map((_, i) => (
+      <div key={i} className="h-16 bg-slate-50 rounded-2xl" />
+    ))}
   </div>
 );
 
-type MonthSelectProps = { value: number; onChange: (v: number) => void };
-const MonthSelect = ({ value, onChange }: MonthSelectProps) => (
-  <div className="flex flex-col gap-1.5">
-    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Mês</label>
-    <select
-      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none shadow-sm transition-all appearance-none cursor-pointer"
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value))}
-    >
-      {Array.from({ length: 12 }).map((_, idx) => {
-        const m = idx + 1;
-        return (
-          <option key={m} value={m}>
-            {m.toString().padStart(2, '0')}
-          </option>
-        );
-      })}
-    </select>
+const SkeletonChart = () => (
+  <div className="h-[320px] bg-slate-50 rounded-[2rem] animate-pulse flex items-center justify-center">
+    <TrendingUp size={48} className="text-slate-100" />
   </div>
 );
 
-type YearSelectProps = { value: 2025 | 2026; onChange: (v: 2025 | 2026) => void };
-const YearSelect = ({ value, onChange }: YearSelectProps) => (
-  <div className="flex flex-col gap-1.5">
-    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Ano</label>
-    <select
-      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none shadow-sm transition-all appearance-none cursor-pointer"
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value) as 2025 | 2026)}
-    >
-      <option value={2025}>2025</option>
-      <option value={2026}>2026</option>
-    </select>
-  </div>
+const ErrorCard = () => (
+   <div className="bg-rose-50 border border-rose-100 p-12 rounded-[2.5rem] text-center flex flex-col items-center gap-4">
+      <AlertCircle size={48} className="text-rose-500" />
+      <h3 className="text-xl font-black text-rose-900 uppercase">Erro na comunicação</h3>
+      <p className="text-rose-700 font-medium">Não foi possível carregar os dados desta visão. Tente novamente em instantes.</p>
+   </div>
 );
 
 export default AtencaoPrimaria;
-

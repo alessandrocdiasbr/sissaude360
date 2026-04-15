@@ -12,5 +12,6 @@ router.get('/despesas', controller.listarDespesas.bind(controller));
 router.get('/transferencias', controller.listarTransferencias.bind(controller));
 router.get('/transferencias/municipio/:ibge/resumo', controller.getResumoMunicipio.bind(controller));
 router.get('/convenios', controller.listarConvenios.bind(controller));
+router.post('/sincronizar', controller.sincronizar.bind(controller));
 
 export default router;

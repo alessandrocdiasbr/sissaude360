@@ -35,7 +35,7 @@ export const listServidores = async (req: Request, res: Response) => {
 
 export const updateServidor = async (req: Request, res: Response) => {
     try {
-        const { id } = req.params;
+        const id = req.params.id as string;
         const servidor = await prisma.servidor.update({
             where: { id },
             data: req.body
@@ -48,7 +48,8 @@ export const updateServidor = async (req: Request, res: Response) => {
 
 export const deleteServidor = async (req: Request, res: Response) => {
     try {
-        await prisma.servidor.delete({ where: { id: req.params.id } });
+        const id = req.params.id as string;
+        await prisma.servidor.delete({ where: { id } });
         res.json({ message: 'Removido.' });
     } catch (error) {
         res.status(500).json({ error: 'Erro ao remover.' });

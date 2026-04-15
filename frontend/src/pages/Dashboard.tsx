@@ -12,10 +12,16 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+import { useEstatisticasFila } from '../hooks/useFilaRegulacao';
+
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { data: filaStats } = useEstatisticasFila();
+
+  const totalAguardando = filaStats?.porStatus['AGUARDANDO'] || 0;
 
   const cards = [
+    // ... outros cards ...
     {
       id: 'aps',
       title: 'Atenção Primária',
@@ -54,12 +60,12 @@ const Dashboard = () => {
     },
     {
       id: 'fila',
-      title: 'Gestão de Fila',
-      description: 'Monitoramento em tempo real de filas de espera e tempo de atendimento.',
+      title: 'Regulação Assistencial',
+      description: 'Regulação de procedimentos: diagnósticos, consultas especializadas e cirurgias.',
       icon: <List className={`text-rose-600`} size={24} />,
       path: '/fila',
       color: 'rose',
-      stats: { label: 'Aguardando', value: '24 pac.', color: 'text-rose-600' }
+      stats: { label: 'Aguardando', value: `${totalAguardando} pac.`, color: 'text-rose-600' }
     },
     {
       id: 'admin',
@@ -77,7 +83,7 @@ const Dashboard = () => {
       {/* Welcome Header */}
       <div className="space-y-2">
         <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">
-          Olá, Bem-vindo ao <span className="text-blue-600">SisSaude360</span>
+          Olá, Bem-vindo ao <span className="text-blue-600">Monitora Saúde</span>
         </h1>
         <p className="text-lg text-slate-500 max-w-2xl">
           Sua central de inteligência para gestão pública de saúde. Selecione um módulo abaixo para iniciar o monitoramento.

@@ -1,32 +1,37 @@
 import { useState, useEffect } from 'react';
 import {
     ArrowLeft, Package, Plus, Search,
-    ArrowUpCircle,
+    ArrowUpCircle, AlertCircle,
     Building2, ClipboardList, Warehouse, Loader2, Save, X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const API_URL = 'http://localhost:3001/api';
 
 const Almoxarifado = () => {
     const navigate = useNavigate();
+    const { token } = useAuth();
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('central');
     const [itens, setItens] = useState<any[]>([]);
-    const [estoque, setEstoque] = useState<any[]>([]);
     const [unidades, setUnidades] = useState<any[]>([]);
-    const [activeTab, setActiveTab] = useState('central'); // 'central' ou 'unidades'
+    const [estoque, setEstoque] = useState<any[]>([]);
     const [search, setSearch] = useState('');
     const [filterCategory, setFilterCategory] = useState('Todos');
-
     const [itemModalOpen, setItemModalOpen] = useState(false);
     const [movModalOpen, setMovModalOpen] = useState(false);
+    const [itensCriticos, setItensCriticos] = useState<any[]>([]);
+    const [movimentacoesMes, setMovimentacoesMes] = useState(0);
+    const [showAlertsExpanded, setShowAlertsExpanded] = useState(false);
     const [selectedItem, setSelectedItem] = useState<any>(null);
 
     const [itemForm, setItemForm] = useState({
         nome: '',
         descricao: '',
         categoria: 'Saúde',
-        unidadeMedida: 'Unidade'
+        unidadeMedida: 'Unidade',
+        estoqueMinimo: 0
     });
 
     const [movForm, setMovForm] = useState({
@@ -40,19 +45,31 @@ const Almoxarifado = () => {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [itensRes, unidadesRes, estoqueRes] = await Promise.all([
-                fetch(`${API_URL}/itens`),
-                fetch(`${API_URL}/unidades`),
-                fetch(`${API_URL}/estoque?unidadeId=${activeTab}`)
+            const headers = { 'Authorization': `Bearer ${token}` };
+            const [itensRes, unidadesRes, estoqueRes, criticosRes, movMesRes] = await Promise.all([
+                fetch(`${API_URL}/itens`, { headers }),
+                fetch(`${API_URL}/unidades`, { headers }),
+                fetch(`${API_URL}/estoque?unidadeId=${activeTab}`, { headers }),
+                fetch(`${API_URL}/estoque/criticos`, { headers }),
+                fetch(`${API_URL}/estoque/movimentacoes-mes`, { headers })
             ]);
+
+            if (itensRes.status === 401) {
+                navigate('/login');
+                return;
+            }
 
             const iData = await itensRes.json();
             const uData = await unidadesRes.json();
             const eData = await estoqueRes.json();
+            const cData = await criticosRes.json();
+            const mData = await movMesRes.json();
 
             setItens(Array.isArray(iData) ? iData : []);
             setUnidades(Array.isArray(uData) ? uData : []);
             setEstoque(Array.isArray(eData) ? eData : []);
+            setItensCriticos(Array.isArray(cData) ? cData : []);
+            setMovimentacoesMes(mData.total || 0);
         } catch (error) {
             console.error('Erro ao buscar dados:', error);
         } finally {
@@ -60,8 +77,28 @@ const Almoxarifado = () => {
         }
     };
 
+    const fetchAlerts = async () => {
+        try {
+            const headers = { 'Authorization': `Bearer ${token}` };
+            const [criticosRes, movMesRes] = await Promise.all([
+                fetch(`${API_URL}/estoque/criticos`, { headers }),
+                fetch(`${API_URL}/estoque/movimentacoes-mes`, { headers })
+            ]);
+            const cData = await criticosRes.json();
+            const mData = await movMesRes.json();
+            setItensCriticos(Array.isArray(cData) ? cData : []);
+            setMovimentacoesMes(mData.total || 0);
+        } catch (error) {
+            console.warn('Erro ao atualizar alertas:', error);
+        }
+    };
+
     useEffect(() => {
         fetchData();
+        
+        // Polling de alertas a cada 60 segundos
+        const interval = setInterval(fetchAlerts, 60000);
+        return () => clearInterval(interval);
     }, [activeTab]);
 
     const handleCreateItem = async (e: React.FormEvent) => {
@@ -69,7 +106,10 @@ const Almoxarifado = () => {
         try {
             const res = await fetch(`${API_URL}/itens`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify(itemForm)
             });
             if (res.ok) {
@@ -86,7 +126,10 @@ const Almoxarifado = () => {
         try {
             const res = await fetch(`${API_URL}/estoque/movimentar`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify(movForm)
             });
             if (res.ok) {
@@ -143,19 +186,67 @@ const Almoxarifado = () => {
                 </div>
             </div>
 
-            {/* Stats */}
+            {/* Alerta de Estoque Crítico */}
+            {itensCriticos.length > 0 && (
+                <div className="animate-in slide-in-from-top duration-300">
+                    <div className={`bg-rose-600 text-white rounded-2xl shadow-xl shadow-rose-500/20 overflow-hidden border border-rose-500 transition-all ${showAlertsExpanded ? 'max-h-[500px]' : 'max-h-20'}`}>
+                        <button 
+                            onClick={() => setShowAlertsExpanded(!showAlertsExpanded)}
+                            className="w-full flex items-center justify-between p-5 hover:bg-rose-700/50 transition-colors"
+                        >
+                            <div className="flex items-center gap-4">
+                                <div className="p-2 bg-rose-500 rounded-lg animate-pulse">
+                                    <AlertCircle size={20} />
+                                </div>
+                                <div className="text-left font-bold">
+                                    <p className="text-sm uppercase tracking-widest opacity-80 leading-tight">Alerta de Estoque</p>
+                                    <p className="text-lg">{itensCriticos.length} {itensCriticos.length === 1 ? 'item contém estoque crítico' : 'itens com estoque crítico'}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-black bg-rose-500/50 px-3 py-1 rounded-full">{showAlertsExpanded ? 'OCULTAR' : 'VER LISTA'}</span>
+                                <Plus size={20} className={`transition-transform duration-300 ${showAlertsExpanded ? 'rotate-45' : ''}`} />
+                            </div>
+                        </button>
+
+                        {showAlertsExpanded && (
+                            <div className="px-5 pb-5 pt-2 overflow-y-auto max-h-[300px]">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {itensCriticos.map((critico: any) => (
+                                        <div key={critico.id} className="bg-rose-700/30 p-4 rounded-xl border border-rose-400/30 flex justify-between items-center group">
+                                            <div className="min-w-0">
+                                                <p className="font-bold truncate">{critico.item.nome}</p>
+                                                <p className="text-[10px] opacity-70 truncate">{critico.unidade?.nome || 'Almoxarifado Central'}</p>
+                                            </div>
+                                            <div className="text-right flex-shrink-0 ml-4">
+                                                <p className="text-xs font-black flex items-center gap-1 justify-end">
+                                                    <span className="text-rose-200">{critico.quantidade}</span>
+                                                    <span className="opacity-50">/</span>
+                                                    <span>Min {critico.item.estoqueMinimo}</span>
+                                                </p>
+                                                <p className="text-[8px] uppercase tracking-tighter opacity-70">{critico.item.unidadeMedida}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Itens Cadastrados</p>
                     <p className="text-2xl font-bold text-slate-900">{itens.length}</p>
                 </div>
-                <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm border-l-4 border-l-amber-400">
+                <div className={`bg-white p-6 rounded-2xl border border-slate-100 shadow-sm border-l-4 transition-all ${itensCriticos.length > 0 ? 'border-l-rose-500 bg-rose-50/10' : 'border-l-amber-400'}`}>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Itens com Baixo Estoque</p>
-                    <p className="text-2xl font-bold text-slate-900">0</p>
+                    <p className={`text-2xl font-bold ${itensCriticos.length > 0 ? 'text-rose-600' : 'text-slate-900'}`}>{itensCriticos.length}</p>
                 </div>
                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Movimentações (Mês)</p>
-                    <p className="text-2xl font-bold text-slate-900">0</p>
+                    <p className="text-2xl font-bold text-slate-900">{movimentacoesMes}</p>
                 </div>
                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm border-l-4 border-l-blue-500">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Status Sistema</p>
@@ -336,6 +427,17 @@ const Almoxarifado = () => {
                                             <option value="Frasco">Frasco</option>
                                             <option value="Rolo">Rolo</option>
                                         </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Estoque Mínimo</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={itemForm.estoqueMinimo}
+                                            onChange={e => setItemForm({ ...itemForm, estoqueMinimo: Number(e.target.value) })}
+                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
+                                            placeholder="Ex: 10"
+                                        />
                                     </div>
                                 </div>
 

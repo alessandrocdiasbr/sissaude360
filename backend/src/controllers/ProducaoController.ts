@@ -27,25 +27,36 @@ export const getDashboardData = async (req: Request, res: Response) => {
     const data2025 = producoes.filter(p => p.ano === 2025);
     const data2026 = producoes.filter(p => p.ano === 2026);
 
+    // Se estivermos filtrando por indicador único, pegamos o tipo dele
+    let isAbsoluto = false;
+    if (indicadorId) {
+       const ind = await prisma.indicador.findUnique({ where: { id: String(indicadorId) } });
+       isAbsoluto = ind?.tipo === 'ABSOLUTO';
+    }
+
     const comparativo = data2025.map(p25 => {
       const p26 = data2026.find(p => p.mes === p25.mes && p.unidadeId === p25.unidadeId && p.indicadorId === p25.indicadorId);
       
+      const val25 = p25.pontuacao;
+      const val26 = p26 ? p26.pontuacao : null;
+
       let evolucao = null;
-      if (p26 && p25.pontuacao > 0) {
-        evolucao = ((p26.pontuacao - p25.pontuacao) / p25.pontuacao) * 100;
-      } else if (p26 && p25.pontuacao === 0 && p26.pontuacao > 0) {
-        evolucao = 100; // Crescimento total se era 0
+      if (val26 !== null && val25 > 0) {
+        evolucao = ((val26 - val25) / val25) * 100;
+      } else if (val26 !== null && val25 === 0 && val26 > 0) {
+        evolucao = 100; 
       }
 
       return {
         mes: p25.mes,
         indicador: p25.indicador.nome,
+        indicadorTipo: p25.indicador.tipo,
         unidade: p25.unidade.nome,
-        valor2025: p25.pontuacao,
-        valor2026: p26 ? p26.pontuacao : null,
+        valor2025: val25,
+        valor2026: val26,
         evolucao: evolucao !== null ? evolucao.toFixed(2) : '0',
-        status2025: getStatus(p25.pontuacao, p25.indicador),
-        status2026: p26 ? getStatus(p26.pontuacao, p25.indicador) : 'Sem Dados'
+        status2025: getStatus(val25, p25.indicador),
+        status2026: p26 ? getStatus(val26!, p25.indicador) : 'Sem Dados'
       };
     });
 
@@ -69,15 +80,27 @@ const getStatus = (score: number, indicador: any) => {
 export const createProducao = async (req: Request, res: Response) => {
   try {
     const data = req.body;
+    
+    // Buscar indicador para saber o tipo
+    const indicador = await prisma.indicador.findUnique({
+      where: { id: data.indicadorId }
+    });
+
+    if (!indicador) throw new Error('Indicador não encontrado');
+
+    const pontuacao = indicador.tipo === 'ABSOLUTO' 
+      ? data.numerador 
+      : (data.numerador / (data.denominador || 1)) * 100;
+
     const producao = await prisma.producao.create({
       data: {
         ...data,
-        pontuacao: (data.numerador / data.denominador) * 100
+        pontuacao: pontuacao
       }
     });
     res.status(201).json(producao);
-  } catch (error) {
-    res.status(400).json({ error: 'Erro ao criar registro de produção' });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || 'Erro ao criar registro de produção' });
   }
 };
 

@@ -70,4 +70,9 @@ export const getConvenios = async (
     return response.data;
 };
 
+export const sincronizarFNS = async (ano: number, ibge: string): Promise<any> => {
+    const response = await fnsApi.post('/fns/sincronizar', { ano, ibge });
+    return response.data;
+};
+
 export default fnsApi;

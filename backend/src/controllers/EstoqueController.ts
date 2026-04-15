@@ -43,3 +43,39 @@ export const movimentarEstoque = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Erro ao movimentar.' });
     }
 };
+
+export const getItensCriticos = async (req: Request, res: Response) => {
+    try {
+        // O Prisma não suporta comparar campos no 'where' diretamente facilmente sem referenciar o mesmo modelo de forma complexa.
+        // Vamos buscar todos e filtrar no código para garantir precisão.
+        const todos = await prisma.estoque.findMany({
+            include: { item: true, unidade: true }
+        });
+        
+        const filtrados = todos.filter(e => e.item.estoqueMinimo > 0 && e.quantidade <= e.item.estoqueMinimo);
+        
+        res.json(filtrados);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erro ao buscar itens críticos.' });
+    }
+};
+
+export const getMovimentacoesMes = async (req: Request, res: Response) => {
+    try {
+        const agora = new Date();
+        const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+        
+        const total = await prisma.movimentacao.count({
+            where: {
+                data: {
+                    gte: inicioMes
+                }
+            }
+        });
+        
+        res.json({ total });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao buscar estatísticas.' });
+    }
+};

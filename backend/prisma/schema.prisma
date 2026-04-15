@@ -8,45 +8,140 @@ generator client {
 }
 
 model Unidade {
-  id          String     @id @default(uuid())
-  nome        String     @unique
-  tipo        String     @default("UBS")
-  endereco    String?
-  telefone    String?
-  producoes   Producao[]
-  estoques    Estoque[]
-  servidores  Servidor[]
+  id         String     @id @default(uuid())
+  nome       String     @unique
+  tipo       String     @default("UBS")
+  tipoEquipe String     @default("eSF")  // "eAP" ou "eSF"
+  nomeEquipe String?                   // ex: "PSF-Zona A", "eAP-Zona B"
+  endereco   String?
+  telefone   String?
+  producoes  Producao[]
+  estoques   Estoque[]
+  servidores Servidor[]
 
   // Fila (Manchester)
-  tickets     Ticket[]
-  salas       Sala[]
+  tickets Ticket[]
+  salas   Sala[]
+  acoes   AcaoSaude[]
+
+  // Regulação de Fila
+  solicitacoesOrigem SolicitacaoFila[] @relation("SolicitacaoOrigem")
+}
+
+// Categoria principal do procedimento (Diagnóstico, Clínico, Cirúrgico)
+model CategoriaProcedimento {
+  id           String   @id @default(uuid())
+  codigo       String   @unique  // DIAGNOSTICO, CLINICO, CIRURGICO
+  nome         String
+  descricao    String?
+  subCategorias SubCategoriaProcedimento[]
+}
+
+// Subcategoria (ex: Diagnóstico Laboratorial, Especialidades Médicas)
+model SubCategoriaProcedimento {
+  id           String   @id @default(uuid())
+  codigo       String   @unique
+  nome         String
+  categoriaId  String
+  categoria    CategoriaProcedimento @relation(fields: [categoriaId], references: [id])
+  procedimentos Procedimento[]
+}
+
+// Procedimento específico (ex: Hemograma, Colonoscopia, Ortopedia)
+model Procedimento {
+  id              String   @id @default(uuid())
+  codigo          String?  // Código TUSS ou SIGTAP se houver
+  nome            String
+  subCategoriaId  String
+  subCategoria    SubCategoriaProcedimento @relation(fields: [subCategoriaId], references: [id])
+  solicitacoes    SolicitacaoFila[]
+  ativo           Boolean @default(true)
+}
+
+// Solicitação de procedimento (registro na fila)
+model SolicitacaoFila {
+  id                String    @id @default(uuid())
+
+  // Paciente
+  pacienteNome      String
+  pacienteCns       String?   // Cartão Nacional de Saúde (15 dígitos)
+  pacienteCpf       String?
+  pacienteNascimento DateTime?
+  pacienteTelefone  String?
+
+  // Procedimento solicitado
+  procedimentoId    String
+  procedimento      Procedimento @relation(fields: [procedimentoId], references: [id])
+
+  // Status da solicitação
+  status            String    @default("AGUARDANDO")
+  // Valores possíveis: AGUARDANDO, AGENDADO, AGUARDA_REGULADOR, ATENDIDO, CANCELADO, FALTA_DOCUMENTOS, DEVOLVIDO
+
+  // Datas e rastreabilidade
+  dataSolicitacao   DateTime  @default(now())
+  dataAgendamento   DateTime?
+  dataAtendimento   DateTime?
+  dataAtualizacao   DateTime  @updatedAt
+
+  // Unidade solicitante e de referência
+  unidadeOrigemId   String
+  unidadeOrigem     Unidade   @relation("SolicitacaoOrigem", fields: [unidadeOrigemId], references: [id])
+  unidadeDestinoNome String?
+
+  // Profissional solicitante
+  medicoSolicitante String?
+  crmSolicitante    String?
+
+  // Prioridade clínica
+  prioridade        String    @default("ELETIVA")
+  // URGENCIA, PRIORITARIO, ELETIVA
+
+  // Observações e motivo de cancelamento/devolução
+  observacoes       String?
+  motivoCancelamento String?
+
+  // Histórico de mudanças de status
+  historico         HistoricoFila[]
+}
+
+// Histórico de mudanças de status para auditoria
+model HistoricoFila {
+  id              String   @id @default(uuid())
+  solicitacaoId   String
+  solicitacao     SolicitacaoFila @relation(fields: [solicitacaoId], references: [id])
+  statusAnterior  String?
+  statusNovo      String
+  observacao      String?
+  registradoEm    DateTime @default(now())
+  registradoPor   String?
 }
 
 model Servidor {
-  id                String   @id @default(uuid())
-  nome              String
-  telefone          String?
-  email             String?
-  funcao            String
-  formaContratacao  String   // Concurso, Processo Seletivo, Contrato Temporário, Comissão
-  unidadeId         String
-  unidade           Unidade  @relation(fields: [unidadeId], references: [id])
+  id               String  @id @default(uuid())
+  nome             String
+  telefone         String?
+  email            String?
+  funcao           String
+  formaContratacao String // Concurso, Processo Seletivo, Contrato Temporário, Comissão
+  unidadeId        String
+  unidade          Unidade @relation(fields: [unidadeId], references: [id])
 }
 
 model Item {
-  id             String         @id @default(uuid())
-  nome           String
-  descricao      String?
-  categoria      String         // Papelaria, Curativo, Instrumental, etc.
-  unidadeMedida  String         // Unidade, Frasco, Caixa, etc.
-  estoques       Estoque[]
-  movimentacoes  Movimentacao[]
+  id            String         @id @default(uuid())
+  nome          String
+  descricao     String?
+  categoria     String // Papelaria, Curativo, Instrumental, etc.
+  unidadeMedida String // Unidade, Frasco, Caixa, etc.
+  estoqueMinimo Float          @default(0)
+  estoques      Estoque[]
+  movimentacoes Movimentacao[]
 }
 
 model Estoque {
   id         String   @id @default(uuid())
   itemId     String
-  unidadeId  String?  // Null se for Almoxarifado Central
+  unidadeId  String? // Null se for Almoxarifado Central
   quantidade Float    @default(0)
   item       Item     @relation(fields: [itemId], references: [id])
   unidade    Unidade? @relation(fields: [unidadeId], references: [id])
@@ -55,19 +150,21 @@ model Estoque {
 }
 
 model Movimentacao {
-  id             String   @id @default(uuid())
-  itemId         String
-  unidadeId      String?
-  tipo           String   // ENTRADA, SAIDA, TRANSFERENCIA
-  quantidade     Float
-  data           DateTime @default(now())
-  observacao     String?
-  item           Item     @relation(fields: [itemId], references: [id])
+  id         String   @id @default(uuid())
+  itemId     String
+  unidadeId  String?
+  tipo       String // ENTRADA, SAIDA, TRANSFERENCIA
+  quantidade Float
+  data       DateTime @default(now())
+  observacao String?
+  item       Item     @relation(fields: [itemId], references: [id])
 }
 
 model Indicador {
   id          String     @id @default(uuid())
   nome        String     @unique
+  tipo        String     @default("PERCENTUAL") // PERCENTUAL ou ABSOLUTO
+  esquemaPontuacao String @default("PADRAO") // "PADRAO" ou "MAIS_ACESSO"
   peso        Float?     @default(1.0)
   categoria   String?
   metaRegular Float      @default(30)
@@ -77,53 +174,120 @@ model Indicador {
 }
 
 model Producao {
-  id           String    @id @default(uuid())
-  unidadeId    String
-  indicadorId  String
-  mes          Int
-  ano          Int
-  numerador    Float
-  denominador  Float
-  pontuacao    Float     // (numerador / denominador) * 100
-  unidade      Unidade   @relation(fields: [unidadeId], references: [id])
-  indicador    Indicador @relation(fields: [indicadorId], references: [id])
+  id          String    @id @default(uuid())
+  unidadeId   String
+  indicadorId String
+  mes         Int
+  ano         Int
+  numerador   Float
+  denominador Float
+  pontuacao   Float // (numerador / denominador) * 100
+  unidade     Unidade   @relation(fields: [unidadeId], references: [id])
+  indicador   Indicador @relation(fields: [indicadorId], references: [id])
 
   @@unique([unidadeId, indicadorId, mes, ano])
 }
 
 model Usuario {
-  id       String @id @default(uuid())
-  nome     String
-  email    String @unique
-  senha    String
+  id    String @id @default(uuid())
+  nome  String
+  email String @unique
+  senha String
 }
 
 model Ticket {
-  id           String   @id @default(uuid())
-  senha        String              // Ex: "A001", "P023"
-  tipo         String              // NORMAL, PRIORITARIO
-  risco        String   @default("VERDE")  // VERMELHO, LARANJA, AMARELO, VERDE, AZUL, BRANCO
-  status       String   @default("AGUARDANDO")  // AGUARDANDO, CHAMADO, EM_ATENDIMENTO, FINALIZADO
+  id     String @id @default(uuid())
+  senha  String // Ex: "A001", "P023"
+  tipo   String // NORMAL, PRIORITARIO
+  risco  String @default("VERDE") // VERMELHO, LARANJA, AMARELO, VERDE, AZUL, BRANCO
+  status String @default("AGUARDANDO") // AGUARDANDO, CHAMADO, EM_ATENDIMENTO, FINALIZADO
 
-  unidadeId    String
-  unidade      Unidade  @relation(fields: [unidadeId], references: [id])
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
-  salaId       String?
-  sala         Sala?    @relation(fields: [salaId], references: [id])
+  salaId String?
+  sala   Sala?   @relation(fields: [salaId], references: [id])
 
-  criadoEm     DateTime @default(now())
+  criadoEm     DateTime  @default(now())
   chamadoEm    DateTime?
   finalizadoEm DateTime?
 }
 
 model Sala {
-  id         String   @id @default(uuid())
-  numero     String              // Ex: "Sala 1", "Guichê 3"
-  tipo       String   @default("CONSULTA")
-  ativo      Boolean  @default(true)
+  id     String  @id @default(uuid())
+  numero String // Ex: "Sala 1", "Guichê 3"
+  tipo   String  @default("CONSULTA")
+  ativo  Boolean @default(true)
 
-  unidadeId  String
-  unidade    Unidade  @relation(fields: [unidadeId], references: [id])
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
-  tickets    Ticket[]
+  tickets Ticket[]
+}
+
+model AcaoSaude {
+  id            String    @id @default(uuid())
+  titulo        String
+  descricao     String?
+  categoria     String // ACAO, SERVICO, COMPRA, EXPANSAO
+  status        String    @default("PROPOSTO") // PROPOSTO, APROVADO, EM_EXECUCAO, CONCLUIDO, CANCELADO
+  prioridade    String    @default("MEDIA") // ALTA, MEDIA, BAIXA
+  responsavel   String?
+  prazo         DateTime?
+  valorEstimado Float?
+  unidadeId     String?
+  unidade       Unidade?  @relation(fields: [unidadeId], references: [id])
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
+}
+
+model MetaAnual {
+  id         String @id @default(uuid())
+  nome       String
+  eixo       String // ACESSO, QUALIDADE, FINANCEIRO, ESTRUTURA
+  ano        Int
+  valorMeta  Float // 0-100 (percentual) ou valor absoluto
+  valorAtual Float  @default(0)
+  unidade    String @default("%") // "%" ou unidade específica
+}
+
+model FNSDespesa {
+  id           Int      @id @default(autoincrement())
+  codigoOrgao  String   @map("codigo_orgao") @db.VarChar(50)
+  descricao    String?
+  valor        Decimal  @db.Decimal(15, 2)
+  competencia  String   @db.VarChar(7) // MM/AAAA
+  rawJson      Json?    @map("raw_json")
+  importadoEm  DateTime @default(now()) @map("importado_em")
+
+  @@unique([codigoOrgao, competencia], name: "uniq_despesa_competencia")
+  @@map("fns_despesas")
+}
+
+model FNSTransferencia {
+  id           Int      @id @default(autoincrement())
+  codigoIbge   String   @map("codigo_ibge") @db.VarChar(7)
+  municipio    String?  @db.VarChar(150)
+  valor        Decimal  @db.Decimal(15, 2)
+  bloco        String   @db.VarChar(100)
+  ano          Int
+  rawJson      Json?    @map("raw_json")
+  importadoEm  DateTime @default(now()) @map("importado_em")
+
+  @@unique([codigoIbge, ano, bloco], name: "uniq_transferencia_ano_bloco")
+  @@map("fns_transferencias")
+}
+
+model FNSConvenio {
+  id           Int      @id @default(autoincrement())
+  numero       String   @unique @db.VarChar(50)
+  objeto       String?
+  valorGlobal  Decimal  @map("valor_global") @db.Decimal(15, 2)
+  situacao     String?  @db.VarChar(100)
+  dataInicio   DateTime? @map("data_inicio") @db.Date
+  dataFim      DateTime? @map("data_fim") @db.Date
+  rawJson      Json?    @map("raw_json")
+  importadoEm  DateTime @default(now()) @map("importado_em")
+
+  @@map("fns_convenios")
 }

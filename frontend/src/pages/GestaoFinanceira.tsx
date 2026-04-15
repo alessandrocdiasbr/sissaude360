@@ -16,10 +16,11 @@ import {
   Download,
   FileJson,
   Loader2,
+  RefreshCw,
   Wallet,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useConvenios, useDespesas, useResumoMunicipio } from '../hooks/useFNS';
+import { useConvenios, useDespesas, useResumoMunicipio, useSincronizarFNS } from '../hooks/useFNS';
 import type { ConvenioFNS, RespostaPaginada, ResumoBloco } from '../types/fns';
 
 const IBGE_STORAGE_KEY = 'sissaude360_ibge';
@@ -29,6 +30,11 @@ type ConveniosQuery = RespostaPaginada<ConvenioFNS>;
 
 const GestaoFinanceira = () => {
   const navigate = useNavigate();
+  const { mutate: syncFNS, isPending: syncing } = useSincronizarFNS();
+  
+  const handleSync = () => {
+    syncFNS({ ano: selectedYear, ibge });
+  };
 
   // SEÇÃO 1 — Filtros
   const now = new Date();
@@ -162,7 +168,17 @@ const GestaoFinanceira = () => {
             Voltar ao Hub
           </button>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Gestão Financeira</h1>
-          <p className="text-slate-500">Repasses FNS e convênios com dados reais.</p>
+          <div className="flex items-center gap-4">
+            <p className="text-slate-500">Repasses FNS e convênios com dados reais.</p>
+            <button
+               onClick={handleSync}
+               disabled={syncing}
+               className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-200 disabled:opacity-50"
+            >
+              {syncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              {syncing ? 'Sincronizando...' : 'Sincronizar FNS'}
+            </button>
+          </div>
         </div>
 
         {/* SEÇÃO 1 — Filtros */}

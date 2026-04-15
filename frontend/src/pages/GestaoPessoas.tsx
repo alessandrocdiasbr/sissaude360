@@ -25,12 +25,24 @@ const GestaoPessoas = () => {
         unidadeId: ''
     });
 
+    const getHeaders = () => {
+        const sessionData = localStorage.getItem('sissaude360_token');
+        const headers: any = { 'Content-Type': 'application/json' };
+        if (sessionData) {
+            try {
+                const { token } = JSON.parse(sessionData);
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+            } catch (e) {}
+        }
+        return headers;
+    };
+
     const fetchData = async () => {
         try {
             setLoading(true);
             const [uRes, sRes] = await Promise.all([
-                fetch(`${API_URL}/unidades`),
-                fetch(`${API_URL}/servidores`)
+                fetch(`${API_URL}/unidades`, { headers: getHeaders() }),
+                fetch(`${API_URL}/servidores`, { headers: getHeaders() })
             ]);
 
             const uData = await uRes.json();
@@ -51,19 +63,28 @@ const GestaoPessoas = () => {
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        if (!form.unidadeId) {
+            alert('Por favor, selecione uma unidade de lotação.');
+            return;
+        }
+
         try {
             const res = await fetch(`${API_URL}/servidores`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getHeaders(),
                 body: JSON.stringify(form)
             });
             if (res.ok) {
                 setModalOpen(false);
                 fetchData();
                 setForm({ nome: '', telefone: '', email: '', funcao: '', formaContratacao: 'Concurso', unidadeId: '' });
+            } else {
+                const errorData = await res.json();
+                alert(errorData.error || 'Erro ao cadastrar');
             }
         } catch (error) {
-            alert('Erro ao cadastrar');
+            alert('Erro na comunicação com o servidor');
         }
     };
 
@@ -337,7 +358,11 @@ const GestaoPessoas = () => {
 
                             <div className="flex gap-4 pt-4">
                                 <button type="button" onClick={() => setModalOpen(false)} className="flex-1 px-8 py-4.5 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all text-xs">Cancelar</button>
-                                <button type="submit" className="flex-1 px-8 py-4.5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20 text-xs flex items-center justify-center gap-2">
+                                <button 
+                                    type="submit" 
+                                    disabled={!form.nome || !form.funcao || !form.unidadeId}
+                                    className="flex-1 px-8 py-4.5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20 text-xs flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed"
+                                >
                                     <Save size={18} /> Salvar Servidor
                                 </button>
                             </div>
