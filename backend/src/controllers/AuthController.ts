@@ -2,6 +2,11 @@ import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
+import dotenv from 'dotenv';
+
+// Garante que scripts/rotas que importam este módulo tenham env carregado.
+// Em dev, o server.ts já chama dotenv.config(), mas em outros entrypoints isso pode não ocorrer.
+dotenv.config({ override: true });
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET!;
@@ -39,6 +44,7 @@ export const login = async (req: Request, res: Response) => {
       usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email }
     });
   } catch (error) {
+    console.error('[AuthController.login] erro:', error);
     res.status(500).json({ error: 'Erro interno no servidor' });
   }
 };

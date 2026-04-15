@@ -16,6 +16,10 @@ model Unidade {
   producoes   Producao[]
   estoques    Estoque[]
   servidores  Servidor[]
+
+  // Fila (Manchester)
+  tickets     Ticket[]
+  salas       Sala[]
 }
 
 model Servidor {
@@ -92,4 +96,34 @@ model Usuario {
   nome     String
   email    String @unique
   senha    String
+}
+
+model Ticket {
+  id           String   @id @default(uuid())
+  senha        String              // Ex: "A001", "P023"
+  tipo         String              // NORMAL, PRIORITARIO
+  risco        String   @default("VERDE")  // VERMELHO, LARANJA, AMARELO, VERDE, AZUL, BRANCO
+  status       String   @default("AGUARDANDO")  // AGUARDANDO, CHAMADO, EM_ATENDIMENTO, FINALIZADO
+
+  unidadeId    String
+  unidade      Unidade  @relation(fields: [unidadeId], references: [id])
+
+  salaId       String?
+  sala         Sala?    @relation(fields: [salaId], references: [id])
+
+  criadoEm     DateTime @default(now())
+  chamadoEm    DateTime?
+  finalizadoEm DateTime?
+}
+
+model Sala {
+  id         String   @id @default(uuid())
+  numero     String              // Ex: "Sala 1", "Guichê 3"
+  tipo       String   @default("CONSULTA")
+  ativo      Boolean  @default(true)
+
+  unidadeId  String
+  unidade    Unidade  @relation(fields: [unidadeId], references: [id])
+
+  tickets    Ticket[]
 }

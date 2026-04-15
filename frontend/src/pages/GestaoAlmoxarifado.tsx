@@ -1,4 +1,3 @@
-import React from 'react';
 import { ArrowLeft, Box, Package, AlertTriangle, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 

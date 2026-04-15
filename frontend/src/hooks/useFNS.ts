@@ -18,10 +18,10 @@ export const useResumoMunicipio = (ibge: string, ano: number) => {
     });
 };
 
-export const useConvenios = (ano: number, pagina = 1) => {
+export const useConvenios = (ano: number, situacao?: string, pagina = 1) => {
     return useQuery({
-        queryKey: ['fns', 'convenios', ano, pagina],
-        queryFn: () => getConvenios(ano, pagina),
+        queryKey: ['fns', 'convenios', ano, situacao ?? 'todas', pagina],
+        queryFn: () => getConvenios(ano, situacao, pagina),
         staleTime: 1000 * 60 * 30, // 30 minutos
     });
 };

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
-    ArrowLeft, Users, UserPlus, Search, Building2,
-    Phone, Mail, Briefcase, FileText, X, Loader2, Save,
+    ArrowLeft, Users, UserPlus, Building2,
+    Phone, Mail, Briefcase, X, Loader2, Save,
     ChevronRight, MapPin, BadgeCheck
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';

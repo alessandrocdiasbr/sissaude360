@@ -7,6 +7,7 @@ import { getEstoque, movimentarEstoque } from '../controllers/EstoqueController'
 import { listServidores, createServidor, updateServidor, deleteServidor } from '../controllers/ServidorController';
 import fnsRoutes from '../modules/fns/fns.routes';
 import { authenticateToken } from '../middlewares/auth';
+import filaRoutes from './filaRoutes';
 
 const router = Router();
 router.use(express.json());
@@ -43,6 +44,7 @@ router.post('/producao', createProducao);
 
 // Módulos
 router.use('/fns', fnsRoutes);
+router.use('/fila', filaRoutes);
 
 export { router as apiRoutes };
 

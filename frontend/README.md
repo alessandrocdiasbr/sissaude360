@@ -71,3 +71,6 @@ export default defineConfig([
   },
 ])
 ```
+
+E-mail: admin@sissaude360.local
+Senha: Admin@360

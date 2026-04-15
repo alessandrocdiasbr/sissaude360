@@ -25,11 +25,6 @@ const FONTES = [
     { id: "QD", label: "Municípios MG", cor: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
 ];
 
-const TIPOS_DOC = [
-    "PORTARIA", "RESOLUÇÃO", "INSTRUÇÃO NORMATIVA",
-    "DECRETO", "EXTRATO", "AVISO", "EDITAL"
-];
-
 const mockAlertas = [
     {
         id: 1, lido: false, salvo: false, destacado: true, preferencia: "Portarias APS",

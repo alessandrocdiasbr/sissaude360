@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
-import { getUnidades, getIndicadores, getAPSPerformance } from '../services/apsApi';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { criarProducao, getDashboard, getIndicadores, getUnidades } from '../services/apsApi';
+import type { ProducaoPayload } from '../types/aps';
 
 export const useUnidades = () => {
   return useQuery({
@@ -17,10 +18,22 @@ export const useIndicadores = () => {
   });
 };
 
-export const useAPSPerformance = (unidadeId?: string, indicadorId?: string) => {
+export const useDashboard = (unidadeId?: string, indicadorId?: string) => {
   return useQuery({
-    queryKey: ['aps', 'performance', unidadeId, indicadorId],
-    queryFn: () => getAPSPerformance(unidadeId, indicadorId),
+    queryKey: ['aps', 'dashboard', unidadeId, indicadorId],
+    queryFn: () => getDashboard(unidadeId, indicadorId),
     staleTime: 1000 * 60 * 15, // 15 minutos
+  });
+};
+
+export const useCriarProducao = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (dados: ProducaoPayload) => criarProducao(dados),
+    onSuccess: async () => {
+      // Invalida todos os dashboards (com ou sem filtros)
+      await queryClient.invalidateQueries({ queryKey: ['aps', 'dashboard'] });
+    },
   });
 };

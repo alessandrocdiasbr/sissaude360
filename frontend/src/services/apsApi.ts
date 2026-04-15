@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Unidade, Indicador, APSDashboardResponse } from '../types/aps';
+import type { Unidade, Indicador, APSDashboardResponse, ProducaoPayload } from '../types/aps';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -33,11 +33,15 @@ export const getIndicadores = async (): Promise<Indicador[]> => {
   return response.data;
 };
 
-export const getAPSPerformance = async (unidadeId?: string, indicadorId?: string): Promise<APSDashboardResponse> => {
+export const getDashboard = async (unidadeId?: string, indicadorId?: string): Promise<APSDashboardResponse> => {
   const response = await apsApi.get('/dashboard', {
     params: { unidadeId, indicadorId }
   });
   return response.data;
+};
+
+export const criarProducao = async (dados: ProducaoPayload): Promise<void> => {
+  await apsApi.post('/producao', dados);
 };
 
 export default apsApi;
