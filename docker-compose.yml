@@ -1,0 +1,76 @@
+# ========================================
+# SisSaúde360 — Docker Compose
+# ========================================
+# Uso: docker compose up --build
+# ========================================
+
+services:
+  # ---- Banco de Dados PostgreSQL ----
+  db:
+    image: postgres:15-alpine
+    container_name: sissaude360_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-user_sissaude}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password_sissaude}
+      POSTGRES_DB: ${DB_NAME:-sissaude360}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-user_sissaude} -d ${DB_NAME:-sissaude360}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - sissaude_net
+
+  # ---- Backend API (Node.js + Prisma) ----
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sissaude360_api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-3001}:3001"
+    environment:
+      DATABASE_URL: "postgresql://${DB_USER:-user_sissaude}:${DB_PASSWORD:-password_sissaude}@db:5432/${DB_NAME:-sissaude360}?schema=public"
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-user_sissaude}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-troque-em-producao}
+      PORT: 3001
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080,http://localhost:5173}
+      MUNICIPIO_IBGE_PADRAO: ${MUNICIPIO_IBGE_PADRAO:-3106200}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - sissaude_net
+
+  # ---- Frontend (React + Vite → Nginx) ----
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3001/api}
+    container_name: sissaude360_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - api
+    networks:
+      - sissaude_net
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  sissaude_net:
+    driver: bridge
