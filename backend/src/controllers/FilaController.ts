@@ -240,9 +240,13 @@ class FilaController {
         prisma.solicitacaoFila.groupBy({ by: ['status'], _count: { id: true } }),
         prisma.solicitacaoFila.groupBy({ by: ['prioridade'], _count: { id: true } }),
         prisma.solicitacaoFila.findMany({
-          select: {
+          include: {
             procedimento: {
-              include: { subCategoria: { include: { categoria: true } } }
+              include: {
+                subCategoria: {
+                  include: { categoria: true }
+                }
+              }
             }
           }
         })

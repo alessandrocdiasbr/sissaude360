@@ -26,6 +26,8 @@ model Unidade {
 
   // Regulação de Fila
   solicitacoesOrigem SolicitacaoFila[] @relation("SolicitacaoOrigem")
+
+  @@map("unidades")
 }
 
 // Categoria principal do procedimento (Diagnóstico, Clínico, Cirúrgico)
@@ -35,6 +37,8 @@ model CategoriaProcedimento {
   nome         String
   descricao    String?
   subCategorias SubCategoriaProcedimento[]
+
+  @@map("categorias_procedimentos")
 }
 
 // Subcategoria (ex: Diagnóstico Laboratorial, Especialidades Médicas)
@@ -45,6 +49,8 @@ model SubCategoriaProcedimento {
   categoriaId  String
   categoria    CategoriaProcedimento @relation(fields: [categoriaId], references: [id])
   procedimentos Procedimento[]
+
+  @@map("sub_categorias_procedimentos")
 }
 
 // Procedimento específico (ex: Hemograma, Colonoscopia, Ortopedia)
@@ -56,6 +62,8 @@ model Procedimento {
   subCategoria    SubCategoriaProcedimento @relation(fields: [subCategoriaId], references: [id])
   solicitacoes    SolicitacaoFila[]
   ativo           Boolean @default(true)
+
+  @@map("procedimentos")
 }
 
 // Solicitação de procedimento (registro na fila)
@@ -102,6 +110,8 @@ model SolicitacaoFila {
 
   // Histórico de mudanças de status
   historico         HistoricoFila[]
+
+  @@map("solicitacoes_fila")
 }
 
 // Histórico de mudanças de status para auditoria
@@ -114,6 +124,8 @@ model HistoricoFila {
   observacao      String?
   registradoEm    DateTime @default(now())
   registradoPor   String?
+
+  @@map("historico_fila")
 }
 
 model Servidor {
@@ -125,6 +137,8 @@ model Servidor {
   formaContratacao String // Concurso, Processo Seletivo, Contrato Temporário, Comissão
   unidadeId        String
   unidade          Unidade @relation(fields: [unidadeId], references: [id])
+
+  @@map("servidores")
 }
 
 model Item {
@@ -136,6 +150,8 @@ model Item {
   estoqueMinimo Float          @default(0)
   estoques      Estoque[]
   movimentacoes Movimentacao[]
+
+  @@map("itens")
 }
 
 model Estoque {
@@ -193,6 +209,8 @@ model Usuario {
   nome  String
   email String @unique
   senha String
+
+  @@map("usuarios")
 }
 
 model Ticket {
@@ -211,6 +229,8 @@ model Ticket {
   criadoEm     DateTime  @default(now())
   chamadoEm    DateTime?
   finalizadoEm DateTime?
+
+  @@map("tickets")
 }
 
 model Sala {
@@ -223,6 +243,8 @@ model Sala {
   unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
   tickets Ticket[]
+
+  @@map("salas")
 }
 
 model AcaoSaude {
@@ -239,6 +261,8 @@ model AcaoSaude {
   unidade       Unidade?  @relation(fields: [unidadeId], references: [id])
   criadoEm      DateTime  @default(now())
   atualizadoEm  DateTime  @updatedAt
+
+  @@map("acoes_saude")
 }
 
 model MetaAnual {

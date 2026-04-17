@@ -7,11 +7,9 @@ import {
   Calendar, 
   User, 
   Building2, 
-  TrendingUp, 
   Target,
   LayoutDashboard,
   CheckCircle2,
-  AlertCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAcoes, useMetas, usePlanejamentoMutations } from '../hooks/usePlanejamento';
@@ -25,14 +23,13 @@ const Planejamento = () => {
     const [showModal, setShowModal] = useState(false);
 
     // Hooks de dados
-    const { data: acoes, isLoading: loadingAcoes } = useAcoes();
-    const { data: metasAgrupadas, isLoading: loadingMetas } = useMetas(selectedYear);
+    const { data: acoes } = useAcoes();
+    const { data: metasAgrupadas } = useMetas(selectedYear);
     const { data: unidades } = useUnidades();
     const { 
       criarAcao, 
       atualizarStatus, 
-      atualizarProgresso,
-      deletarAcao 
+      atualizarProgresso
     } = usePlanejamentoMutations();
 
     // Estado para nova ação

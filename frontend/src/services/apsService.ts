@@ -1,10 +1,23 @@
 import axios from 'axios';
 
+import type { Unidade } from './unidadeApi';
+
 // --- Tipos Consolidados para evitar erros de resolução de módulo ---
 export type StatusAPS = 'OTIMO' | 'BOM' | 'SUFICIENTE' | 'REGULAR';
 export type EsquemaPontuacao = 'PADRAO' | 'MAIS_ACESSO';
 export type TipoEquipe = 'eAP' | 'eSF';
 export type ViewAPS = 'indicador' | 'equipe' | 'competencia';
+
+export interface ProducaoPayload {
+  indicadorId: string;
+  unidadeId: string;
+  mes: number;
+  ano: number;
+  numerador: number;
+  denominador?: number;
+}
+
+export type { Unidade };
 
 export interface RegraPontuacao {
   status: StatusAPS;

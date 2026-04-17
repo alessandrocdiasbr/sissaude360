@@ -66,8 +66,8 @@ const AtencaoPrimaria = () => {
   });
 
   // --- Dados Base ---
-  const { data: indicadores = [], isLoading: loadingInds } = useIndicadoresAPS();
-  const { data: unidades = [], isLoading: loadingUnits } = useUnidadesAPS();
+  const { data: indicadores = [] } = useIndicadoresAPS();
+  const { data: unidades = [] } = useUnidadesAPS();
 
   // Inicialização de IDs padrão
   useEffect(() => {
@@ -209,7 +209,7 @@ const AtencaoPrimaria = () => {
                 onChange={e => setIndicadorId(e.target.value)}
                 className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-4 font-bold text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all cursor-pointer truncate"
               >
-                {indicadores.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+                {indicadores.map((i: any) => <option key={i.id} value={i.id}>{i.nome}</option>)}
               </select>
             </div>
 
@@ -223,7 +223,7 @@ const AtencaoPrimaria = () => {
                     onChange={e => setUnidadeId(e.target.value)}
                     className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-4 font-bold text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all cursor-pointer"
                   >
-                    {unidades.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                    {unidades.map((u: any) => <option key={u.id} value={u.id}>{u.nome}</option>)}
                   </select>
                 </>
               ) : (
@@ -261,18 +261,18 @@ const AtencaoPrimaria = () => {
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
                 {filtrosAplicados.view === 'indicador' && (
                   <>
-                    <p className="text-sm font-medium text-slate-500">Indicador: <span className="text-slate-900 font-bold">{indicadores.find(i => i.id === filtrosAplicados.indicadorId)?.nome}</span></p>
+                    <p className="text-sm font-medium text-slate-500">Indicador: <span className="text-slate-900 font-bold">{indicadores.find((i: any) => i.id === filtrosAplicados.indicadorId)?.nome}</span></p>
                     <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
                     <p className="text-sm font-medium text-slate-500">Mês: <span className="text-slate-900 font-bold">{formatCompLabel(filtrosAplicados.mes, filtrosAplicados.ano)}</span></p>
                   </>
                 )}
                 {filtrosAplicados.view === 'equipe' && (
-                  <p className="text-sm font-medium text-slate-500">Equipe: <span className="text-slate-900 font-bold">{unidades.find(u => u.id === filtrosAplicados.unidadeId)?.nome}</span></p>
+                  <p className="text-sm font-medium text-slate-500">Equipe: <span className="text-slate-900 font-bold">{unidades.find((u: any) => u.id === filtrosAplicados.unidadeId)?.nome}</span></p>
                 )}
                 <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
                 <p className="text-sm font-medium text-slate-500 text-nowrap">Tipos: <span className="text-slate-900 font-bold">{filtrosAplicados.tipos}</span></p>
                 
-                {(resIndicador.data?.isPreliminar || resEquipe.data?.isPreliminar || resEvolucao.data?.isPreliminar) && (
+                {(resIndicador.data?.isPreliminar || resEquipe.data?.isPreliminar) && (
                   <span className="ml-2 px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-widest rounded-full flex items-center gap-1.5">
                     <Info size={12} /> Dado Preliminar
                   </span>
@@ -323,7 +323,7 @@ const AtencaoPrimaria = () => {
 
         {/* Footer Score Panel */}
         <ScorePanel 
-          indicador={indicadores.find(i => i.id === filtrosAplicados.indicadorId)} 
+          indicador={indicadores.find((i: any) => i.id === filtrosAplicados.indicadorId)} 
         />
       </div>
 

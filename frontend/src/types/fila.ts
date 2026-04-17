@@ -1,4 +1,4 @@
-import type { Unidade } from './aps';
+import type { Unidade } from '../services/apsService';
 
 export type StatusFila = 
   'AGUARDANDO' | 'AGENDADO' | 'AGUARDA_REGULADOR' | 

@@ -16,10 +16,13 @@ const allowedOrigins = process.env.CORS_ORIGIN
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir requisições sem origin (como mobile apps ou curl) ou se estiver na lista
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Normalizar origin: remover barra no final se existir
+    const cleanOrigin = origin ? origin.replace(/\/$/, '') : null;
+    
+    if (!origin || allowedOrigins.includes(cleanOrigin!)) {
       callback(null, true);
     } else {
+      console.warn(`[CORS] Bloqueado: ${origin} não está na lista permitida:`, allowedOrigins);
       callback(new Error('Origem não permitida pelo CORS'));
     }
   },

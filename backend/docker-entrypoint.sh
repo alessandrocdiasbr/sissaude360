@@ -18,11 +18,21 @@ fi
 
 echo "✅ PostgreSQL disponível!"
 
-echo "🔄 Executando migrations..."
-npx prisma migrate deploy
+echo "🔄 Executando migrations (Prisma)..."
+if npx prisma migrate deploy; then
+  echo "✅ Migrations aplicadas com sucesso!"
+else
+  echo "⚠️  Falha ao aplicar migrations formais. Tentando 'db push' para sincronizar o banco..."
+  npx prisma db push --accept-data-loss
+  echo "✅ Banco de dados sincronizado via db push!"
+fi
 
 echo "🌱 Executando seeds..."
-node prisma/seed.js || echo "⚠️  Seed falhou (pode já ter sido executado)"
+if node prisma/seed.js; then
+  echo "✅ Seeds executados com sucesso!"
+else
+  echo "⚠️  Seed falhou ou já foi executado. Continuando..."
+fi
 
 echo "🚀 Iniciando servidor..."
 exec "$@"

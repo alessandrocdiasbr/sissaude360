@@ -1,10 +1,10 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
-  Search, Plus, Filter, Download, ChevronRight, X, 
-  Clock, AlertCircle, CheckCircle2, Calendar, User, 
-  Stethoscope, Building2, MapPin, History, ChevronLeft,
+  Search, Plus, Filter, Download, X, 
+  Clock, AlertCircle, CheckCircle2, User, 
+  Stethoscope, History, ChevronLeft,
   MoreVertical, FileText, ArrowRightLeft, RefreshCw,
-  LayoutDashboard, Info
+  Info
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -62,7 +62,6 @@ const GestaoFila = () => {
     const { data: listData, isLoading: loadingList } = useSolicitacoes({ ...filtros, busca: buscaDebounced });
     const { data: stats, isLoading: loadingStats } = useEstatisticasFila();
     const { data: categoriasData } = useCategorias();
-    const { data: unidadesData } = useUnidades();
 
     // Modais e Drawer
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -320,7 +319,7 @@ const GestaoFila = () => {
                                                     <span className="text-[10px] text-slate-400 font-bold uppercase">{formatDistanceToNow(new Date(s.dataSolicitacao), { addSuffix: true, locale: ptBR })}</span>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                            <td className="px-6 py-4 text-right" onClick={(e: any) => e.stopPropagation()}>
                                                 <div className="flex justify-end items-center gap-2">
                                                     <button 
                                                         onClick={() => setShowStatusModal(s.id)}
@@ -371,7 +370,7 @@ const GestaoFila = () => {
             </main>
 
             {/* Painel Lateral (Drawer) */}
-            <DrawerDetalhes id={selectedId} onClose={() => setSelectedId(null)} onStatusChange={(id) => setShowStatusModal(id)} />
+            <DrawerDetalhes id={selectedId} onClose={() => setSelectedId(null)} onStatusChange={(id: string) => setShowStatusModal(id)} />
 
             {/* Modais */}
             <ModalNovoSolicitacao open={showCreateModal} onClose={() => setShowCreateModal(false)} />
@@ -509,7 +508,7 @@ const DrawerDetalhes = ({ id, onClose, onStatusChange }: any) => {
 
                 <div className="p-8 border-t border-slate-100 bg-slate-50/50 flex gap-3">
                     <button 
-                        onClick={() => onStatusChange(s.id)}
+                        onClick={() => s && onStatusChange(s.id)}
                         className="flex-1 py-3 bg-blue-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-500/10 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
                     >
                         <ArrowRightLeft size={18} /> Alterar Status

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Unidade, Indicador, APSDashboardResponse, ProducaoPayload } from '../types/aps';
+import type { Unidade, IndicadorAPS as Indicador, ResultadoPorIndicador as APSDashboardResponse, ProducaoPayload } from './apsService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
