@@ -9,10 +9,14 @@ import dotenv from 'dotenv';
 dotenv.config({ override: true });
 
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET!;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-troque-em-producao';
 
-if (!JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET não definido nas variáveis de ambiente.');
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('FATAL: JWT_SECRET não definido nas variáveis de ambiente em produção.');
+}
+
+if (!process.env.JWT_SECRET) {
+  console.warn('⚠️  Aviso: JWT_SECRET não definido. Usando segredo padrão de desenvolvimento.');
 }
 
 export const login = async (req: Request, res: Response) => {
