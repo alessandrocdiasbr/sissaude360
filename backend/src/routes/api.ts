@@ -10,6 +10,7 @@ import { authenticateToken } from '../middlewares/auth';
 import filaRoutes from './filaRoutes';
 import planejamentoRoutes from './planejamentoRoutes';
 import apsRoutes from './apsRoutes';
+import diarioOficialRoutes from './diarioOficialRoutes';
 
 const router = Router();
 router.use(express.json());
@@ -51,6 +52,7 @@ router.use('/fns', fnsRoutes);
 router.use('/fila', filaRoutes);
 router.use('/planejamento', planejamentoRoutes);
 router.use('/aps', apsRoutes);
+router.use('/diario', diarioOficialRoutes);
 
 export { router as apiRoutes };
 

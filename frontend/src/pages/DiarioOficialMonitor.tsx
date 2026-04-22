@@ -14,9 +14,22 @@ import {
     Tag,
     Bell,
     Trash2,
-    AlertCircle
+    AlertCircle,
+    RefreshCw,
+    Loader2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import {
+    useArtigos,
+    useSalvarArtigo,
+    usePreferencias,
+    useCriarPreferencia,
+    useAtualizarPreferencia,
+    useDeletarPreferencia,
+    useColetarDiario,
+    useBuscaManual,
+} from '../hooks/useDiarioOficial';
+import type { DiarioArtigo, DiarioPreferencia } from '../types/diarioOficial';
 
 const FONTES = [
     { id: "DOU", label: "DOU Federal", cor: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" },
@@ -25,99 +38,115 @@ const FONTES = [
     { id: "QD", label: "Municípios MG", cor: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
 ];
 
-const mockAlertas = [
-    {
-        id: 1, lido: false, salvo: false, destacado: true, preferencia: "Portarias APS",
-        fonte: "DOU", tipo: "PORTARIA",
-        titulo: "PORTARIA GM/MS Nº 1.891, DE 14 DE ABRIL DE 2026",
-        resumo: "Altera critérios de financiamento da Atenção Primária à Saúde nos municípios com população inferior a 20.000 habitantes.",
-        data: "14/04/2026",
-        url: "https://www.in.gov.br/consulta/-/google-search?q=PORTARIA+GM/MS+N%C2%BA+1.891"
-    },
-    {
-        id: 2, lido: false, salvo: true, destacado: false, preferencia: "Vigilância Sanitária MG",
-        fonte: "DOMG", tipo: "RESOLUÇÃO",
-        titulo: "Resolução SES/MG nº 8.023 de 13 de abril de 2026",
-        resumo: "Dispõe sobre protocolos de vigilância sanitária para estabelecimentos de saúde no Estado de Minas Gerais.",
-        data: "13/04/2026",
-        url: "https://www.jornalminasgerais.mg.gov.br/index.php"
-    },
-    {
-        id: 3, lido: true, salvo: false, destacado: false, preferencia: "Portarias APS",
-        fonte: "DOU", tipo: "INSTRUÇÃO NORMATIVA",
-        titulo: "INSTRUÇÃO NORMATIVA SAPS/MS Nº 44, DE 10 DE ABRIL DE 2026",
-        resumo: "Estabelece diretrizes para o monitoramento de indicadores da Estratégia Saúde da Família.",
-        data: "10/04/2026",
-        url: "https://www.in.gov.br/consulta/-/google-search?q=INSTRUCAO+NORMATIVA+SAPS"
-    },
-    {
-        id: 4, lido: false, salvo: false, destacado: false, preferencia: "Legislação MG",
-        fonte: "ALMG", tipo: "LEI",
-        titulo: "Lei Estadual nº 24.521/2026 — Atenção à Saúde Mental",
-        resumo: "Institui a Política Estadual de Atenção Integral em Saúde Mental no âmbito do SUS-MG.",
-        data: "09/04/2026",
-        url: "https://www.almg.gov.br/atividade-legislativa/normas-juridicas/"
-    },
-];
-
-const mockPreferencias = [
-    { id: 1, nome: "Portarias APS", termos: ["atenção primária", "APS", "ESF"], fontes: ["DOU"], secao: "1", tipo_doc: "PORTARIA", ativo: true },
-    { id: 2, nome: "Vigilância Sanitária MG", termos: ["vigilância sanitária", "VISA"], fontes: ["DOMG"], secao: "all", tipo_doc: "RESOLUÇÃO", ativo: true },
-    { id: 3, nome: "Legislação MG", termos: ["saúde", "SUS"], fontes: ["ALMG"], secao: "all", tipo_doc: null, ativo: true },
-];
+// UI-only state for local article decorations (read / highlight)
+interface LocalArtigoState {
+    lido: boolean;
+    destacado: boolean;
+}
 
 const DiarioOficialMonitor = () => {
     const navigate = useNavigate();
     const [aba, setAba] = useState("alertas");
-    const [alertas, setAlertas] = useState(mockAlertas);
-    const [preferencias, setPreferencias] = useState(mockPreferencias);
     const [filtroFonte, setFiltroFonte] = useState("todas");
     const [modalAberto, setModalAberto] = useState(false);
-    const [prefEditando, setPrefEditando] = useState<any>(null);
-    const [form, setForm] = useState<any>({ nome: "", termos: "", fontes: [], secao: "1", tipo_doc: "" });
+    const [prefEditando, setPrefEditando] = useState<DiarioPreferencia | null>(null);
+    const [form, setForm] = useState<{ titulo: string; termos: string; fontes: string[] }>({
+        titulo: "",
+        termos: "",
+        fontes: [],
+    });
 
-    const alertasFiltrados = alertas.filter(a => {
-        if (aba === "alertas") {
-            if (filtroFonte !== "todas" && a.fonte !== filtroFonte) return false;
-            return true;
-        }
+    // UI-only local state for "lido" and "destacado" (no backend needed)
+    const [localState, setLocalState] = useState<Record<string, LocalArtigoState>>({});
+
+    // Busca manual form state
+    const [buscaTermos, setBuscaTermos] = useState("");
+    const [buscaDataInicio, setBuscaDataInicio] = useState("");
+    const [buscaDataFim, setBuscaDataFim] = useState("");
+    const [buscaFontesSelecionadas, setBuscaFontesSelecionadas] = useState<string[]>(
+        FONTES.map(f => f.id)
+    );
+
+    // --- React Query hooks ---
+    const artigosQuery = useArtigos(
+        filtroFonte !== "todas" ? { fonte: filtroFonte } : undefined
+    );
+    const preferenciasQuery = usePreferencias();
+    const salvarArtigo = useSalvarArtigo();
+    const coletarDiario = useColetarDiario();
+    const buscaManual = useBuscaManual();
+    const criarPreferencia = useCriarPreferencia();
+    const atualizarPreferencia = useAtualizarPreferencia();
+    const deletarPreferencia = useDeletarPreferencia();
+
+    // Helpers for local UI state
+    const getLocalState = (id: string): LocalArtigoState =>
+        localState[id] ?? { lido: false, destacado: false };
+
+    const marcarLido = (id: string) =>
+        setLocalState(prev => ({
+            ...prev,
+            [id]: { ...getLocalState(id), lido: true },
+        }));
+
+    const toggleDestacar = (id: string) =>
+        setLocalState(prev => ({
+            ...prev,
+            [id]: { ...getLocalState(id), destacado: !getLocalState(id).destacado },
+        }));
+
+    // Derived lists
+    const artigos: DiarioArtigo[] = artigosQuery.data ?? [];
+    const preferencias: DiarioPreferencia[] = preferenciasQuery.data ?? [];
+
+    const artigosFiltrados = artigos.filter(a => {
+        const local = getLocalState(a.id);
         if (aba === "salvos") return a.salvo;
-        if (aba === "destaques") return a.destacado;
+        if (aba === "destaques") return local.destacado;
         return true;
     });
 
-    const marcarLido = (id: number) => setAlertas(prev =>
-        prev.map(a => a.id === id ? { ...a, lido: true } : a)
-    );
+    const naoLidos = artigos.filter(a => !getLocalState(a.id).lido).length;
 
-    const toggleSalvar = (id: number) => setAlertas(prev =>
-        prev.map(a => a.id === id ? { ...a, salvo: !a.salvo } : a)
-    );
-
-    const toggleDestacar = (id: number) => setAlertas(prev =>
-        prev.map(a => a.id === id ? { ...a, destacado: !a.destacado } : a)
-    );
-
+    // Modal save handler
     const salvarPreferencia = () => {
-        if (!form.nome || !form.termos || form.fontes.length === 0) return;
-        const nova = {
-            id: prefEditando ? prefEditando.id : Date.now(),
-            nome: form.nome,
-            termos: form.termos.split(",").map((t: string) => t.trim()).filter(Boolean),
-            fontes: form.fontes,
-            secao: form.secao,
-            tipo_doc: form.tipo_doc || null,
-            ativo: true
-        };
+        if (!form.titulo || !form.termos || form.fontes.length === 0) return;
+
+        const termos = form.termos
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean);
+
         if (prefEditando) {
-            setPreferencias(prev => prev.map(p => p.id === prefEditando.id ? nova : p));
+            atualizarPreferencia.mutate(
+                { id: prefEditando.id, dados: { titulo: form.titulo, termos, fontes: form.fontes } },
+                { onSuccess: () => setModalAberto(false) }
+            );
         } else {
-            setPreferencias(prev => [...prev, nova]);
+            criarPreferencia.mutate(
+                { titulo: form.titulo, termos, fontes: form.fontes },
+                { onSuccess: () => setModalAberto(false) }
+            );
         }
-        setModalAberto(false);
     };
 
-    const naoLidos = alertas.filter(a => !a.lido).length;
+    const handleBuscaManual = () => {
+        if (!buscaTermos.trim() || buscaFontesSelecionadas.length === 0) return;
+        buscaManual.mutate({
+            termos: buscaTermos,
+            fontes: buscaFontesSelecionadas,
+            dataInicio: buscaDataInicio || undefined,
+            dataFim: buscaDataFim || undefined,
+        });
+    };
+
+    const toggleBuscaFonte = (id: string) => {
+        setBuscaFontesSelecionadas(prev =>
+            prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]
+        );
+    };
+
+    const isSavingPref = criarPreferencia.isPending || atualizarPreferencia.isPending;
 
     return (
         <div className="min-h-screen bg-slate-50/50">
@@ -151,6 +180,18 @@ const DiarioOficialMonitor = () => {
                                 {new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}
                             </p>
                         </div>
+                        <button
+                            onClick={() => coletarDiario.mutate()}
+                            disabled={coletarDiario.isPending}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+                            title="Disparar coleta manual agora"
+                        >
+                            {coletarDiario.isPending
+                                ? <Loader2 size={16} className="animate-spin" />
+                                : <RefreshCw size={16} />
+                            }
+                            Atualizar Agora
+                        </button>
                         <button
                             onClick={() => setAba('preferencias')}
                             className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-500/20 flex items-center gap-2"
@@ -198,7 +239,7 @@ const DiarioOficialMonitor = () => {
                                 {aba === "salvos" && "Publicações Salvas"}
                                 {aba === "destaques" && "Prioridades e Destaques"}
                                 <span className="text-sm font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-                                    {alertasFiltrados.length}
+                                    {artigosFiltrados.length}
                                 </span>
                             </h2>
 
@@ -217,109 +258,149 @@ const DiarioOficialMonitor = () => {
                             )}
                         </div>
 
-                        <div className="grid grid-cols-1 gap-4">
-                            {alertasFiltrados.length === 0 ? (
-                                <div className="bg-white border-2 border-dashed border-slate-200 rounded-[2rem] p-12 text-center space-y-4">
-                                    <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto text-slate-300">
-                                        <AlertCircle size={32} />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-lg font-bold text-slate-800">Nada encontrado aqui</h3>
-                                        <p className="text-sm text-slate-500 max-w-xs mx-auto">
-                                            {aba === "salvos" ? "Suas publicações salvas aparecerão aqui." : "Continue monitorando os Diários Oficiais para novas publicações."}
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : (
-                                alertasFiltrados.map(alerta => (
-                                    <div
-                                        key={alerta.id}
-                                        className={`group bg-white rounded-3xl p-6 border transition-all ${alerta.lido ? "border-slate-100 opacity-80" : "border-slate-200 shadow-sm hover:shadow-md hover:border-blue-200"
-                                            }`}
-                                    >
-                                        <div className="flex flex-col lg:flex-row gap-6">
-                                            <div className="flex-1 space-y-4">
-                                                <div className="flex flex-wrap gap-2">
-                                                    <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${FONTES.find(f => f.id === alerta.fonte)?.bg
-                                                        } ${FONTES.find(f => f.id === alerta.fonte)?.cor
-                                                        }`}>
-                                                        {FONTES.find(f => f.id === alerta.fonte)?.label}
-                                                    </span>
-                                                    <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-wider">
-                                                        {alerta.tipo}
-                                                    </span>
-                                                    <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-bold flex items-center gap-1">
-                                                        <Tag size={10} /> {alerta.preferencia}
-                                                    </span>
-                                                    {!alerta.lido && (
-                                                        <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black animate-pulse uppercase tracking-wider shadow-sm shadow-amber-200/50">
-                                                            Novo
-                                                        </span>
-                                                    )}
-                                                </div>
+                        {/* Loading state */}
+                        {artigosQuery.isLoading && (
+                            <div className="flex items-center justify-center py-16">
+                                <Loader2 size={36} className="animate-spin text-blue-500" />
+                            </div>
+                        )}
 
-                                                <div>
-                                                    <h3 className="text-lg font-extrabold text-slate-900 leading-tight mb-2 group-hover:text-blue-600 transition-colors">
-                                                        {alerta.titulo}
-                                                    </h3>
-                                                    <p className="text-slate-600 text-sm leading-relaxed mb-4">
-                                                        {alerta.resumo}
-                                                    </p>
-                                                    <div className="flex items-center gap-4 text-xs font-bold text-slate-400">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <Clock size={14} />
-                                                            Publicado em {alerta.data}
+                        {/* Error state */}
+                        {artigosQuery.isError && (
+                            <div className="bg-rose-50 border border-rose-200 rounded-3xl p-8 text-center space-y-3">
+                                <AlertCircle className="mx-auto text-rose-500" size={32} />
+                                <p className="text-rose-700 font-bold">Erro ao carregar publicações.</p>
+                                <button
+                                    onClick={() => artigosQuery.refetch()}
+                                    className="text-sm text-rose-600 underline hover:no-underline"
+                                >
+                                    Tentar novamente
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Content */}
+                        {!artigosQuery.isLoading && !artigosQuery.isError && (
+                            <div className="grid grid-cols-1 gap-4">
+                                {artigosFiltrados.length === 0 ? (
+                                    <div className="bg-white border-2 border-dashed border-slate-200 rounded-[2rem] p-12 text-center space-y-4">
+                                        <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto text-slate-300">
+                                            <AlertCircle size={32} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-bold text-slate-800">Nada encontrado aqui</h3>
+                                            <p className="text-sm text-slate-500 max-w-xs mx-auto">
+                                                {aba === "salvos" ? "Suas publicações salvas aparecerão aqui." : "Continue monitorando os Diários Oficiais para novas publicações."}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    artigosFiltrados.map(artigo => {
+                                        const local = getLocalState(artigo.id);
+                                        const dataFormatada = new Date(artigo.dataPublicacao).toLocaleDateString("pt-BR", {
+                                            day: "2-digit", month: "2-digit", year: "numeric"
+                                        });
+
+                                        return (
+                                            <div
+                                                key={artigo.id}
+                                                className={`group bg-white rounded-3xl p-6 border transition-all ${local.lido ? "border-slate-100 opacity-80" : "border-slate-200 shadow-sm hover:shadow-md hover:border-blue-200"
+                                                    }`}
+                                            >
+                                                <div className="flex flex-col lg:flex-row gap-6">
+                                                    <div className="flex-1 space-y-4">
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${FONTES.find(f => f.id === artigo.fonte)?.bg
+                                                                } ${FONTES.find(f => f.id === artigo.fonte)?.cor
+                                                                }`}>
+                                                                {FONTES.find(f => f.id === artigo.fonte)?.label ?? artigo.fonte}
+                                                            </span>
+                                                            {artigo.secao && (
+                                                                <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-wider">
+                                                                    {artigo.secao}
+                                                                </span>
+                                                            )}
+                                                            {artigo.orgao && (
+                                                                <span className="px-3 py-1 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-bold flex items-center gap-1">
+                                                                    <Tag size={10} /> {artigo.orgao}
+                                                                </span>
+                                                            )}
+                                                            {!local.lido && (
+                                                                <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black animate-pulse uppercase tracking-wider shadow-sm shadow-amber-200/50">
+                                                                    Novo
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        <div>
+                                                            <h3 className="text-lg font-extrabold text-slate-900 leading-tight mb-2 group-hover:text-blue-600 transition-colors">
+                                                                {artigo.titulo}
+                                                            </h3>
+                                                            {artigo.resumo && (
+                                                                <p className="text-slate-600 text-sm leading-relaxed mb-4">
+                                                                    {artigo.resumo}
+                                                                </p>
+                                                            )}
+                                                            <div className="flex items-center gap-4 text-xs font-bold text-slate-400">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <Clock size={14} />
+                                                                    Publicado em {dataFormatada}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex lg:flex-col items-center justify-end gap-2 border-t lg:border-t-0 lg:border-l border-slate-100 pt-4 lg:pt-0 lg:pl-6">
+                                                        {artigo.url && (
+                                                            <a
+                                                                href={artigo.url}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="flex-1 lg:w-full flex items-center justify-center gap-2 px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 text-center"
+                                                            >
+                                                                LER ÍNTEGRA <ExternalLink size={14} />
+                                                            </a>
+                                                        )}
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => salvarArtigo.mutate(artigo.id)}
+                                                                disabled={salvarArtigo.isPending}
+                                                                className={`p-2.5 rounded-xl border transition-all ${artigo.salvo
+                                                                        ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20"
+                                                                        : "bg-white border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200"
+                                                                    } disabled:opacity-60`}
+                                                                title={artigo.salvo ? "Remover dos salvos" : "Salvar publicação"}
+                                                            >
+                                                                <Bookmark size={18} fill={artigo.salvo ? "currentColor" : "none"} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => toggleDestacar(artigo.id)}
+                                                                className={`p-2.5 rounded-xl border transition-all ${local.destacado
+                                                                        ? "bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-500/20"
+                                                                        : "bg-white border-slate-200 text-slate-400 hover:text-amber-500 hover:border-amber-200"
+                                                                    }`}
+                                                                title={local.destacado ? "Remover destaque" : "Destacar publicação"}
+                                                            >
+                                                                <Star size={18} fill={local.destacado ? "currentColor" : "none"} />
+                                                            </button>
+                                                            {!local.lido && (
+                                                                <button
+                                                                    onClick={() => marcarLido(artigo.id)}
+                                                                    className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all"
+                                                                    title="Marcar como lido"
+                                                                >
+                                                                    <CheckCircle2 size={18} />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
-
-                                            <div className="flex lg:flex-col items-center justify-end gap-2 border-t lg:border-t-0 lg:border-l border-slate-100 pt-4 lg:pt-0 lg:pl-6">
-                                                <a
-                                                    href={alerta.url}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="flex-1 lg:w-full flex items-center justify-center gap-2 px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 text-center"
-                                                >
-                                                    LER ÍNTEGRA <ExternalLink size={14} />
-                                                </a>
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => toggleSalvar(alerta.id)}
-                                                        className={`p-2.5 rounded-xl border transition-all ${alerta.salvo
-                                                                ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20"
-                                                                : "bg-white border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200"
-                                                            }`}
-                                                        title={alerta.salvo ? "Remover dos salvos" : "Salvar publicação"}
-                                                    >
-                                                        <Bookmark size={18} fill={alerta.salvo ? "currentColor" : "none"} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => toggleDestacar(alerta.id)}
-                                                        className={`p-2.5 rounded-xl border transition-all ${alerta.destacado
-                                                                ? "bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-500/20"
-                                                                : "bg-white border-slate-200 text-slate-400 hover:text-amber-500 hover:border-amber-200"
-                                                            }`}
-                                                        title={alerta.destacado ? "Remover destaque" : "Destacar publicação"}
-                                                    >
-                                                        <Star size={18} fill={alerta.destacado ? "currentColor" : "none"} />
-                                                    </button>
-                                                    {!alerta.lido && (
-                                                        <button
-                                                            onClick={() => marcarLido(alerta.id)}
-                                                            className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all"
-                                                            title="Marcar como lido"
-                                                        >
-                                                            <CheckCircle2 size={18} />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -334,7 +415,7 @@ const DiarioOficialMonitor = () => {
                             <button
                                 onClick={() => {
                                     setPrefEditando(null);
-                                    setForm({ nome: "", termos: "", fontes: [], secao: "1", tipo_doc: "" });
+                                    setForm({ titulo: "", termos: "", fontes: [] });
                                     setModalAberto(true);
                                 }}
                                 className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-sm font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20"
@@ -343,63 +424,85 @@ const DiarioOficialMonitor = () => {
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {preferencias.map(pref => (
-                                <div key={pref.id} className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all group">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
-                                            <Bell size={20} />
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => {
-                                                    setPrefEditando(pref);
-                                                    setForm({
-                                                        nome: pref.nome,
-                                                        termos: pref.termos.join(", "),
-                                                        fontes: pref.fontes,
-                                                        secao: pref.secao,
-                                                        tipo_doc: pref.tipo_doc || ""
-                                                    });
-                                                    setModalAberto(true);
-                                                }}
-                                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                            >
-                                                <Settings size={16} />
-                                            </button>
-                                            <button
-                                                onClick={() => setPreferencias(prev => prev.filter(p => p.id !== pref.id))}
-                                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
+                        {/* Loading state */}
+                        {preferenciasQuery.isLoading && (
+                            <div className="flex items-center justify-center py-16">
+                                <Loader2 size={36} className="animate-spin text-blue-500" />
+                            </div>
+                        )}
 
-                                    <h3 className="text-lg font-bold text-slate-800 mb-2">{pref.nome}</h3>
+                        {/* Error state */}
+                        {preferenciasQuery.isError && (
+                            <div className="bg-rose-50 border border-rose-200 rounded-3xl p-8 text-center space-y-3">
+                                <AlertCircle className="mx-auto text-rose-500" size={32} />
+                                <p className="text-rose-700 font-bold">Erro ao carregar preferências.</p>
+                                <button
+                                    onClick={() => preferenciasQuery.refetch()}
+                                    className="text-sm text-rose-600 underline hover:no-underline"
+                                >
+                                    Tentar novamente
+                                </button>
+                            </div>
+                        )}
 
-                                    <div className="space-y-4">
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {pref.fontes.map(f => (
-                                                <span key={f} className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md">
-                                                    {f}
-                                                </span>
-                                            ))}
+                        {!preferenciasQuery.isLoading && !preferenciasQuery.isError && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {preferencias.map(pref => (
+                                    <div key={pref.id} className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
+                                                <Bell size={20} />
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => {
+                                                        setPrefEditando(pref);
+                                                        setForm({
+                                                            titulo: pref.titulo,
+                                                            termos: pref.termos.join(", "),
+                                                            fontes: pref.fontes,
+                                                        });
+                                                        setModalAberto(true);
+                                                    }}
+                                                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                >
+                                                    <Settings size={16} />
+                                                </button>
+                                                <button
+                                                    onClick={() => deletarPreferencia.mutate(pref.id)}
+                                                    disabled={deletarPreferencia.isPending}
+                                                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all disabled:opacity-60"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Termos Monitorados</p>
-                                            <div className="flex flex-wrap gap-1">
-                                                {pref.termos.map((t, idx) => (
-                                                    <span key={idx} className="bg-blue-50 text-blue-700 px-2 py-1 rounded-lg text-xs font-bold border border-blue-100">
-                                                        {t}
+
+                                        <h3 className="text-lg font-bold text-slate-800 mb-2">{pref.titulo}</h3>
+
+                                        <div className="space-y-4">
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {pref.fontes.map(f => (
+                                                    <span key={f} className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md">
+                                                        {f}
                                                     </span>
                                                 ))}
                                             </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Termos Monitorados</p>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {pref.termos.map((t, idx) => (
+                                                        <span key={idx} className="bg-blue-50 text-blue-700 px-2 py-1 rounded-lg text-xs font-bold border border-blue-100">
+                                                            {t}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -418,6 +521,8 @@ const DiarioOficialMonitor = () => {
                                     <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={24} />
                                     <input
                                         type="text"
+                                        value={buscaTermos}
+                                        onChange={e => setBuscaTermos(e.target.value)}
                                         placeholder='Ex: "atenção primária", "recursos", "portaria"'
                                         className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-blue-500/20 focus:ring-4 focus:ring-blue-500/5 rounded-3xl pl-16 pr-8 py-5 text-lg font-medium outline-none transition-all shadow-inner"
                                     />
@@ -427,11 +532,21 @@ const DiarioOficialMonitor = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2 text-left">
                                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">De</label>
-                                    <input type="date" className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-blue-500/20 rounded-2xl px-6 py-4 outline-none font-bold text-slate-700 transition-all" />
+                                    <input
+                                        type="date"
+                                        value={buscaDataInicio}
+                                        onChange={e => setBuscaDataInicio(e.target.value)}
+                                        className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-blue-500/20 rounded-2xl px-6 py-4 outline-none font-bold text-slate-700 transition-all"
+                                    />
                                 </div>
                                 <div className="space-y-2 text-left">
                                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Até</label>
-                                    <input type="date" className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-blue-500/20 rounded-2xl px-6 py-4 outline-none font-bold text-slate-700 transition-all" />
+                                    <input
+                                        type="date"
+                                        value={buscaDataFim}
+                                        onChange={e => setBuscaDataFim(e.target.value)}
+                                        className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-blue-500/20 rounded-2xl px-6 py-4 outline-none font-bold text-slate-700 transition-all"
+                                    />
                                 </div>
                             </div>
 
@@ -439,20 +554,95 @@ const DiarioOficialMonitor = () => {
                                 <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Fontes</label>
                                 <div className="flex flex-wrap gap-3">
                                     {FONTES.map(f => (
-                                        <label key={f.id} className="cursor-pointer group">
-                                            <input type="checkbox" className="hidden peer" defaultChecked />
-                                            <div className={`px-6 py-3 rounded-2xl border-2 border-slate-100 text-sm font-bold bg-slate-50 transition-all peer-checked:bg-white peer-checked:border-blue-500 peer-checked:text-blue-600 peer-checked:shadow-lg peer-checked:shadow-blue-500/10 group-hover:bg-white`}>
-                                                {f.label}
-                                            </div>
-                                        </label>
+                                        <button
+                                            key={f.id}
+                                            type="button"
+                                            onClick={() => toggleBuscaFonte(f.id)}
+                                            className={`px-6 py-3 rounded-2xl border-2 text-sm font-bold transition-all ${buscaFontesSelecionadas.includes(f.id)
+                                                    ? "bg-white border-blue-500 text-blue-600 shadow-lg shadow-blue-500/10"
+                                                    : "bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-slate-200"
+                                                }`}
+                                        >
+                                            {f.label}
+                                        </button>
                                     ))}
                                 </div>
                             </div>
 
-                            <button className="w-full py-5 bg-slate-900 hover:bg-black text-white rounded-[2rem] font-black tracking-widest uppercase text-sm transition-all shadow-2xl shadow-slate-900/20">
+                            <button
+                                onClick={handleBuscaManual}
+                                disabled={buscaManual.isPending || !buscaTermos.trim()}
+                                className="w-full py-5 bg-slate-900 hover:bg-black disabled:opacity-60 text-white rounded-[2rem] font-black tracking-widest uppercase text-sm transition-all shadow-2xl shadow-slate-900/20 flex items-center justify-center gap-3"
+                            >
+                                {buscaManual.isPending && <Loader2 size={20} className="animate-spin" />}
                                 Iniciar Pesquisa Avançada
                             </button>
                         </div>
+
+                        {/* Busca results */}
+                        {buscaManual.isError && (
+                            <div className="bg-rose-50 border border-rose-200 rounded-3xl p-6 text-center space-y-2">
+                                <AlertCircle className="mx-auto text-rose-500" size={28} />
+                                <p className="text-rose-700 font-bold text-sm">Erro ao realizar a busca. Tente novamente.</p>
+                            </div>
+                        )}
+
+                        {buscaManual.isSuccess && (
+                            <div className="space-y-4">
+                                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                    Resultados
+                                    <span className="text-sm font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                                        {buscaManual.data.length}
+                                    </span>
+                                </h3>
+
+                                {buscaManual.data.length === 0 ? (
+                                    <div className="bg-white border-2 border-dashed border-slate-200 rounded-[2rem] p-10 text-center space-y-3">
+                                        <AlertCircle size={32} className="mx-auto text-slate-300" />
+                                        <p className="text-slate-500 font-medium">Nenhuma publicação encontrada para os critérios informados.</p>
+                                    </div>
+                                ) : (
+                                    buscaManual.data.map(artigo => {
+                                        const dataFormatada = new Date(artigo.dataPublicacao).toLocaleDateString("pt-BR", {
+                                            day: "2-digit", month: "2-digit", year: "numeric"
+                                        });
+                                        return (
+                                            <div key={artigo.id} className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+                                                <div className="flex flex-wrap gap-2 mb-3">
+                                                    <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${FONTES.find(f => f.id === artigo.fonte)?.bg} ${FONTES.find(f => f.id === artigo.fonte)?.cor}`}>
+                                                        {FONTES.find(f => f.id === artigo.fonte)?.label ?? artigo.fonte}
+                                                    </span>
+                                                    {artigo.secao && (
+                                                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-wider">
+                                                            {artigo.secao}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <h4 className="text-base font-extrabold text-slate-900 leading-tight mb-2">{artigo.titulo}</h4>
+                                                {artigo.resumo && (
+                                                    <p className="text-slate-600 text-sm leading-relaxed mb-3">{artigo.resumo}</p>
+                                                )}
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                                                        <Clock size={13} /> {dataFormatada}
+                                                    </span>
+                                                    {artigo.url && (
+                                                        <a
+                                                            href={artigo.url}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="flex items-center gap-1.5 text-xs font-black text-slate-700 hover:text-blue-600 transition-colors"
+                                                        >
+                                                            LER ÍNTEGRA <ExternalLink size={12} />
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -470,8 +660,8 @@ const DiarioOficialMonitor = () => {
                             <div className="space-y-2">
                                 <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Nome da Regra</label>
                                 <input
-                                    value={form.nome}
-                                    onChange={e => setForm((f: any) => ({ ...f, nome: e.target.value }))}
+                                    value={form.titulo}
+                                    onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))}
                                     placeholder='Ex: "Legislação de Financiamento"'
                                     className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-blue-500/20 rounded-2xl px-6 py-4 outline-none font-bold text-slate-700 transition-all shadow-inner"
                                 />
@@ -484,7 +674,7 @@ const DiarioOficialMonitor = () => {
                                 </label>
                                 <textarea
                                     value={form.termos}
-                                    onChange={e => setForm((f: any) => ({ ...f, termos: e.target.value }))}
+                                    onChange={e => setForm(f => ({ ...f, termos: e.target.value }))}
                                     placeholder='recursos, suspensão, acréscimo, portaria nº'
                                     rows={3}
                                     className="w-full bg-slate-50 border-2 border-transparent focus:bg-white focus:border-blue-500/20 rounded-2xl px-6 py-4 outline-none font-bold text-slate-700 transition-all shadow-inner resize-none"
@@ -497,11 +687,12 @@ const DiarioOficialMonitor = () => {
                                     {FONTES.map(f => (
                                         <button
                                             key={f.id}
+                                            type="button"
                                             onClick={() => {
                                                 const newFontes = form.fontes.includes(f.id)
-                                                    ? form.fontes.filter((x: string) => x !== f.id)
+                                                    ? form.fontes.filter((x) => x !== f.id)
                                                     : [...form.fontes, f.id];
-                                                setForm((prev: any) => ({ ...prev, fontes: newFontes }));
+                                                setForm(prev => ({ ...prev, fontes: newFontes }));
                                             }}
                                             className={`px-4 py-3 rounded-2xl border-2 text-left transition-all ${form.fontes.includes(f.id)
                                                     ? "bg-white border-blue-500 text-blue-600 shadow-lg shadow-blue-500/10"
@@ -524,8 +715,13 @@ const DiarioOficialMonitor = () => {
                             </button>
                             <button
                                 onClick={salvarPreferencia}
-                                className="flex-[2] py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-[1.5rem] font-bold shadow-xl shadow-blue-500/20 transition-all flex items-center justify-center gap-2"
+                                disabled={isSavingPref}
+                                className="flex-[2] py-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-[1.5rem] font-bold shadow-xl shadow-blue-500/20 transition-all flex items-center justify-center gap-2"
                             >
+                                {isSavingPref
+                                    ? <Loader2 size={18} className="animate-spin" />
+                                    : null
+                                }
                                 {prefEditando ? "Salvar Alterações" : "Ativar Monitoramento"} <ChevronRight size={18} />
                             </button>
                         </div>

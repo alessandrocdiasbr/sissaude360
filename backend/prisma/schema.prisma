@@ -315,3 +315,33 @@ model FNSConvenio {
 
   @@map("fns_convenios")
 }
+
+model DiarioOficialArtigo {
+  id             String    @id @default(uuid())
+  titulo         String
+  corpo          String?
+  resumo         String?
+  fonte          String
+  secao          String?
+  orgao          String?
+  url            String?
+  dataPublicacao DateTime  @db.Date
+  salvo          Boolean   @default(false)
+  salvoEm        DateTime?
+  capturedoEm    DateTime  @default(now())
+
+  @@index([fonte, dataPublicacao])
+  @@index([salvo])
+  @@map("diario_oficial_artigos")
+}
+
+model DiarioOficialPreferencia {
+  id        String   @id @default(uuid())
+  titulo    String
+  termos    String
+  fontes    String
+  ativo     Boolean  @default(true)
+  criadoEm DateTime @default(now())
+
+  @@map("diario_oficial_preferencias")
+}
