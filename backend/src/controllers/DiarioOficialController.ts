@@ -1,6 +1,13 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { fetchDOU, fetchDOMG, fetchALMG, executarColeta } from '../services/DiarioOficialService';
+import { executarColeta } from '../services/DiarioOficialService';
+import {
+  airflowDisponivel,
+  acionarTodasDags,
+  parseWebhookHtml,
+  salvarArtigosWebhook,
+  sincronizarYamls,
+} from '../services/RoDOUService';
 
 const prisma = new PrismaClient();
 
@@ -11,14 +18,7 @@ class DiarioOficialController {
    */
   async listarArtigos(req: Request, res: Response) {
     try {
-      const {
-        fonte,
-        busca,
-        salvo,
-        data,
-        pagina = 1,
-        limite = 20,
-      } = req.query;
+      const { fonte, busca, salvo, data, pagina = 1, limite = 20 } = req.query;
 
       const p = Math.max(Number(pagina), 1);
       const l = Math.min(Math.max(Number(limite), 1), 100);
@@ -40,10 +40,12 @@ class DiarioOficialController {
       }
 
       if (busca) {
+        const qRaw = Array.isArray(busca) ? busca[0] : busca;
+        const q = typeof qRaw === 'string' ? qRaw : '';
         where.OR = [
-          { titulo: { contains: String(busca), mode: 'insensitive' } },
-          { resumo: { contains: String(busca), mode: 'insensitive' } },
-          { orgao: { contains: String(busca), mode: 'insensitive' } },
+          { titulo: { contains: q, mode: 'insensitive' } },
+          { resumo: { contains: q, mode: 'insensitive' } },
+          { orgao: { contains: q, mode: 'insensitive' } },
         ];
       }
 
@@ -59,12 +61,7 @@ class DiarioOficialController {
 
       res.json({
         dados: artigos,
-        paginacao: {
-          total,
-          pagina: p,
-          limite: l,
-          totalPaginas: Math.ceil(total / l),
-        },
+        paginacao: { total, pagina: p, limite: l, totalPaginas: Math.ceil(total / l) },
       });
     } catch (error) {
       console.error('DiarioOficialController.listarArtigos:', error);
@@ -74,24 +71,18 @@ class DiarioOficialController {
 
   /**
    * PATCH /api/diario/artigos/:id/salvar
-   * Toggle salvo field
    */
   async salvarArtigo(req: Request, res: Response) {
     try {
       const { id } = req.params;
 
       const artigo = await prisma.diarioOficialArtigo.findUnique({ where: { id } });
-      if (!artigo) {
-        return res.status(404).json({ erro: 'Artigo não encontrado.' });
-      }
+      if (!artigo) return res.status(404).json({ erro: 'Artigo não encontrado.' });
 
       const novoEstado = !artigo.salvo;
       const atualizado = await prisma.diarioOficialArtigo.update({
         where: { id },
-        data: {
-          salvo: novoEstado,
-          salvoEm: novoEstado ? new Date() : null,
-        },
+        data: { salvo: novoEstado, salvoEm: novoEstado ? new Date() : null },
       });
 
       res.json(atualizado);
@@ -102,74 +93,30 @@ class DiarioOficialController {
   }
 
   /**
-   * POST /api/diario/buscar
-   * Body: { termos: string[], fontes: string[], dataInicio?: string, dataFim?: string }
-   * Fetches from sources and returns results WITHOUT storing in DB
-   */
-  async buscarManual(req: Request, res: Response) {
-    try {
-      const { termos, fontes, dataInicio, dataFim } = req.body;
-
-      if (!termos || !Array.isArray(termos) || termos.length === 0) {
-        return res.status(400).json({ erro: 'Informe ao menos um termo de busca.' });
-      }
-
-      if (!fontes || !Array.isArray(fontes) || fontes.length === 0) {
-        return res.status(400).json({ erro: 'Informe ao menos uma fonte.' });
-      }
-
-      const resultados: any[] = [];
-      const fontesValidas = ['DOU', 'DOMG', 'ALMG'];
-
-      for (const fonte of fontes) {
-        if (!fontesValidas.includes(fonte)) continue;
-
-        let artigos: any[] = [];
-        try {
-          if (fonte === 'DOU') artigos = await fetchDOU(termos);
-          else if (fonte === 'DOMG') artigos = await fetchDOMG(termos);
-          else if (fonte === 'ALMG') artigos = await fetchALMG(termos);
-        } catch (fetchErr: any) {
-          console.error(`DiarioOficialController.buscarManual [${fonte}]:`, fetchErr.message);
-        }
-
-        // Filter by date range if provided
-        let filtrados = artigos;
-        if (dataInicio) {
-          const di = new Date(dataInicio);
-          filtrados = filtrados.filter((a) => new Date(a.dataPublicacao) >= di);
-        }
-        if (dataFim) {
-          const df = new Date(dataFim);
-          filtrados = filtrados.filter((a) => new Date(a.dataPublicacao) <= df);
-        }
-
-        resultados.push(...filtrados);
-      }
-
-      res.json({ dados: resultados, total: resultados.length });
-    } catch (error) {
-      console.error('DiarioOficialController.buscarManual:', error);
-      res.status(500).json({ erro: 'Erro ao realizar busca manual.' });
-    }
-  }
-
-  /**
    * POST /api/diario/coletar
-   * Triggers manual collection job
+   * Aciona o Ro-DOU via API do Airflow; fallback para coleta legada se Airflow indisponível.
    */
-  async coletar(req: Request, res: Response) {
+  async coletar(_req: Request, res: Response) {
     try {
-      // Fire and forget — respond immediately then run in background
-      res.json({ mensagem: 'Coleta iniciada em segundo plano.' });
+      const rodouAtivo = await airflowDisponivel();
 
-      executarColeta()
-        .then(() => {
-          console.log('[DiarioOficialController] Coleta manual concluída.');
-        })
-        .catch((err) => {
-          console.error('[DiarioOficialController] Erro na coleta manual:', err);
+      if (rodouAtivo) {
+        // Sincroniza YAMLs das preferências e dispara todos os DAGs
+        sincronizarYamls().catch((e) =>
+          console.error('[DiarioOficialController] Erro ao sincronizar YAMLs:', e),
+        );
+        const runs = await acionarTodasDags();
+        return res.json({
+          mensagem: `Coleta iniciada via Ro-DOU: ${runs.length} DAG(s) acionado(s).`,
+          dags: runs,
         });
+      }
+
+      // Fallback: coleta legada
+      res.json({ mensagem: 'Ro-DOU indisponível — coleta legada iniciada em segundo plano.' });
+      executarColeta()
+        .then(() => console.log('[DiarioOficialController] Coleta legada concluída.'))
+        .catch((err) => console.error('[DiarioOficialController] Erro na coleta legada:', err));
     } catch (error) {
       console.error('DiarioOficialController.coletar:', error);
       res.status(500).json({ erro: 'Erro ao iniciar coleta.' });
@@ -177,23 +124,51 @@ class DiarioOficialController {
   }
 
   /**
+   * POST /api/diario/webhook-rodou
+   * Recebe resultados do Ro-DOU via Apprise (json://) e persiste no banco.
+   */
+  async webhookRoDOU(req: Request, res: Response) {
+    try {
+      const { title, message, type } = req.body as {
+        title?: string;
+        message?: string;
+        type?: string;
+      };
+
+      if (!message) {
+        return res.status(400).json({ erro: 'Payload inválido: campo message ausente.' });
+      }
+
+      // Ro-DOU envia type="info" apenas quando há resultados; ignorar outros
+      if (type && type !== 'info' && type !== 'success') {
+        return res.json({ ignorado: true, type });
+      }
+
+      const artigos = parseWebhookHtml(message);
+      console.log(`[DiarioOficialController] Webhook Ro-DOU "${title}": ${artigos.length} artigos extraídos.`);
+
+      const salvos = await salvarArtigosWebhook(artigos);
+      res.json({ recebidos: artigos.length, salvos });
+    } catch (error) {
+      console.error('DiarioOficialController.webhookRoDOU:', error);
+      res.status(500).json({ erro: 'Erro ao processar webhook.' });
+    }
+  }
+
+  /**
    * GET /api/diario/preferencias
    */
-  async listarPreferencias(req: Request, res: Response) {
+  async listarPreferencias(_req: Request, res: Response) {
     try {
       const preferencias = await prisma.diarioOficialPreferencia.findMany({
         orderBy: { criadoEm: 'desc' },
       });
 
-      // Parse termos JSON and fontes string for each preference
       const resultado = preferencias.map((p) => ({
         ...p,
         termos: (() => {
-          try {
-            return JSON.parse(p.termos);
-          } catch {
-            return p.termos.split(',').map((t) => t.trim()).filter(Boolean);
-          }
+          try { return JSON.parse(p.termos); }
+          catch { return p.termos.split(',').map((t) => t.trim()).filter(Boolean); }
         })(),
         fontes: p.fontes.split(',').map((f) => f.trim()).filter(Boolean),
       }));
@@ -207,19 +182,16 @@ class DiarioOficialController {
 
   /**
    * POST /api/diario/preferencias
-   * Body: { titulo: string, termos: string[], fontes: string[], ativo?: boolean }
    */
   async criarPreferencia(req: Request, res: Response) {
     try {
       const { titulo, termos, fontes, ativo } = req.body;
 
       if (!titulo) return res.status(400).json({ erro: 'Título é obrigatório.' });
-      if (!termos || !Array.isArray(termos) || termos.length === 0) {
+      if (!Array.isArray(termos) || termos.length === 0)
         return res.status(400).json({ erro: 'Informe ao menos um termo.' });
-      }
-      if (!fontes || !Array.isArray(fontes) || fontes.length === 0) {
+      if (!Array.isArray(fontes) || fontes.length === 0)
         return res.status(400).json({ erro: 'Informe ao menos uma fonte.' });
-      }
 
       const preferencia = await prisma.diarioOficialPreferencia.create({
         data: {
@@ -230,11 +202,10 @@ class DiarioOficialController {
         },
       });
 
-      res.status(201).json({
-        ...preferencia,
-        termos,
-        fontes,
-      });
+      // Gera YAML para o Ro-DOU em background
+      sincronizarYamls().catch(() => {});
+
+      res.status(201).json({ ...preferencia, termos, fontes });
     } catch (error) {
       console.error('DiarioOficialController.criarPreferencia:', error);
       res.status(500).json({ erro: 'Erro ao criar preferência.' });
@@ -243,7 +214,6 @@ class DiarioOficialController {
 
   /**
    * PUT /api/diario/preferencias/:id
-   * Body: { titulo?, termos?, fontes?, ativo? }
    */
   async atualizarPreferencia(req: Request, res: Response) {
     try {
@@ -255,14 +225,18 @@ class DiarioOficialController {
 
       const updateData: any = {};
       if (titulo !== undefined) updateData.titulo = titulo;
-      if (termos !== undefined) updateData.termos = JSON.stringify(Array.isArray(termos) ? termos : [termos]);
-      if (fontes !== undefined) updateData.fontes = Array.isArray(fontes) ? fontes.join(',') : String(fontes);
+      if (termos !== undefined)
+        updateData.termos = JSON.stringify(Array.isArray(termos) ? termos : [termos]);
+      if (fontes !== undefined)
+        updateData.fontes = Array.isArray(fontes) ? fontes.join(',') : String(fontes);
       if (ativo !== undefined) updateData.ativo = Boolean(ativo);
 
       const atualizada = await prisma.diarioOficialPreferencia.update({
         where: { id },
         data: updateData,
       });
+
+      sincronizarYamls().catch(() => {});
 
       res.json({
         ...atualizada,
@@ -279,36 +253,6 @@ class DiarioOficialController {
   }
 
   /**
-   * GET /api/diario/diagnostico
-   * Testa cada fonte e retorna contagens + erros para diagnóstico
-   */
-  async diagnostico(_req: Request, res: Response) {
-    const termosTeste = ['saúde', 'sus'];
-    const resultado: Record<string, { artigos: number; erro?: string }> = {};
-
-    for (const [nome, fn] of [
-      ['DOU', () => fetchDOU(termosTeste)],
-      ['DOMG', () => fetchDOMG(termosTeste)],
-      ['ALMG', () => fetchALMG(termosTeste)],
-    ] as [string, () => Promise<any[]>][]) {
-      try {
-        const artigos = await fn();
-        resultado[nome] = { artigos: artigos.length };
-      } catch (err: any) {
-        resultado[nome] = { artigos: 0, erro: err.message };
-      }
-    }
-
-    const totalBanco = await prisma.diarioOficialArtigo.count();
-    const ultimaPublicacao = await prisma.diarioOficialArtigo.findFirst({
-      orderBy: { dataPublicacao: 'desc' },
-      select: { dataPublicacao: true, fonte: true },
-    });
-
-    res.json({ fontes: resultado, totalBanco, ultimaPublicacao });
-  }
-
-  /**
    * DELETE /api/diario/preferencias/:id
    */
   async deletarPreferencia(req: Request, res: Response) {
@@ -319,11 +263,33 @@ class DiarioOficialController {
       if (!exists) return res.status(404).json({ erro: 'Preferência não encontrada.' });
 
       await prisma.diarioOficialPreferencia.delete({ where: { id } });
+      sincronizarYamls().catch(() => {});
 
       res.json({ mensagem: 'Preferência removida com sucesso.' });
     } catch (error) {
       console.error('DiarioOficialController.deletarPreferencia:', error);
       res.status(500).json({ erro: 'Erro ao deletar preferência.' });
+    }
+  }
+
+  /**
+   * GET /api/diario/diagnostico
+   */
+  async diagnostico(_req: Request, res: Response) {
+    try {
+      const [totalBanco, ultimaPublicacao, rodouAtivo] = await Promise.all([
+        prisma.diarioOficialArtigo.count(),
+        prisma.diarioOficialArtigo.findFirst({
+          orderBy: { dataPublicacao: 'desc' },
+          select: { dataPublicacao: true, fonte: true },
+        }),
+        airflowDisponivel(),
+      ]);
+
+      res.json({ rodouAtivo, totalBanco, ultimaPublicacao });
+    } catch (error) {
+      console.error('DiarioOficialController.diagnostico:', error);
+      res.status(500).json({ erro: 'Erro ao obter diagnóstico.' });
     }
   }
 }

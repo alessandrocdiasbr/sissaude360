@@ -7,11 +7,11 @@ const router = Router();
 router.get('/artigos', (req, res) => diarioOficialController.listarArtigos(req, res));
 router.patch('/artigos/:id/salvar', (req, res) => diarioOficialController.salvarArtigo(req, res));
 
-// Busca manual (não persiste)
-router.post('/buscar', (req, res) => diarioOficialController.buscarManual(req, res));
-
 // Disparo manual da coleta
 router.post('/coletar', (req, res) => diarioOficialController.coletar(req, res));
+
+// Webhook do Ro-DOU (Apprise json://)
+router.post('/webhook-rodou', (req, res) => diarioOficialController.webhookRoDOU(req, res));
 
 // Diagnóstico
 router.get('/diagnostico', (req, res) => diarioOficialController.diagnostico(req, res));

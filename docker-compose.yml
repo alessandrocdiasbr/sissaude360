@@ -70,8 +70,130 @@ services:
     networks:
       - sissaude_net
 
+  # ---- Ro-DOU: Banco de dados do Airflow ----
+  rodou-db:
+    image: postgres:15
+    container_name: rodou_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${RODOU_DB_USER:-airflow}
+      POSTGRES_PASSWORD: ${RODOU_DB_PASSWORD:-airflow}
+      POSTGRES_DB: ${RODOU_DB_NAME:-airflow}
+    volumes:
+      - rodou_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${RODOU_DB_USER:-airflow} -d ${RODOU_DB_NAME:-airflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sissaude_net
+    profiles:
+      - rodou
+
+  # ---- Ro-DOU: Inicialização do Airflow ----
+  rodou-init:
+    build:
+      context: ./rodou
+      dockerfile: Dockerfile
+    container_name: rodou_init
+    depends_on:
+      rodou-db:
+        condition: service_healthy
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${RODOU_DB_USER}:${RODOU_DB_PASSWORD}@rodou-db/${RODOU_DB_NAME}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__DEFAULT_TIMEZONE: America/Sao_Paulo
+      AIRFLOW__CORE__FERNET_KEY: ${RODOU_FERNET_KEY:-Uqv6pwYWJn7xifR3QAkifMTkupos8mkxaQL2Q7Ydsqw=}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${RODOU_SECRET_KEY:-sissaude360-rodou-secret}
+      RO_DOU__DAG_CONF_DIR: /opt/airflow/dags/ro_dou/dag_confs
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${RODOU_USER:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${RODOU_PASSWORD:-admin}
+    entrypoint: /bin/bash
+    command: >
+      -c "airflow db migrate &&
+          airflow users create
+            --username ${RODOU_USER:-admin}
+            --password ${RODOU_PASSWORD:-admin}
+            --firstname Admin --lastname Ro-DOU
+            --role Admin --email admin@sissaude360.local || true"
+    volumes:
+      - rodou_logs:/opt/airflow/logs
+      - ./rodou/dag_confs:/opt/airflow/dags/ro_dou/dag_confs:ro
+    networks:
+      - sissaude_net
+    profiles:
+      - rodou
+
+  # ---- Ro-DOU: Webserver Airflow ----
+  rodou-webserver:
+    build:
+      context: ./rodou
+      dockerfile: Dockerfile
+    container_name: rodou_webserver
+    restart: unless-stopped
+    depends_on:
+      rodou-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${RODOU_DB_USER}:${RODOU_DB_PASSWORD}@rodou-db/${RODOU_DB_NAME}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__DEFAULT_TIMEZONE: America/Sao_Paulo
+      AIRFLOW__CORE__FERNET_KEY: ${RODOU_FERNET_KEY:-Uqv6pwYWJn7xifR3QAkifMTkupos8mkxaQL2Q7Ydsqw=}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${RODOU_SECRET_KEY:-sissaude360-rodou-secret}
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+      RO_DOU__DAG_CONF_DIR: /opt/airflow/dags/ro_dou/dag_confs
+    command: webserver
+    ports:
+      - "${RODOU_WEBSERVER_PORT:-8081}:8080"
+    volumes:
+      - rodou_logs:/opt/airflow/logs
+      - ./rodou/dag_confs:/opt/airflow/dags/ro_dou/dag_confs:ro
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - sissaude_net
+    profiles:
+      - rodou
+
+  # ---- Ro-DOU: Scheduler Airflow ----
+  rodou-scheduler:
+    build:
+      context: ./rodou
+      dockerfile: Dockerfile
+    container_name: rodou_scheduler
+    restart: unless-stopped
+    depends_on:
+      rodou-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${RODOU_DB_USER}:${RODOU_DB_PASSWORD}@rodou-db/${RODOU_DB_NAME}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__DEFAULT_TIMEZONE: America/Sao_Paulo
+      AIRFLOW__CORE__FERNET_KEY: ${RODOU_FERNET_KEY:-Uqv6pwYWJn7xifR3QAkifMTkupos8mkxaQL2Q7Ydsqw=}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${RODOU_SECRET_KEY:-sissaude360-rodou-secret}
+      RO_DOU__DAG_CONF_DIR: /opt/airflow/dags/ro_dou/dag_confs
+    command: scheduler
+    volumes:
+      - rodou_logs:/opt/airflow/logs
+      - ./rodou/dag_confs:/opt/airflow/dags/ro_dou/dag_confs:ro
+    networks:
+      - sissaude_net
+    profiles:
+      - rodou
+
 volumes:
   postgres_data:
+    driver: local
+  rodou_postgres_data:
+    driver: local
+  rodou_logs:
     driver: local
 
 networks:

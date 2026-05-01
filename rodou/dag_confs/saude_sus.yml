@@ -1,0 +1,29 @@
+dag:
+  id: saude_sus_dou
+  description: "Monitoramento do DOU - Saúde Pública, SUS e Atenção Básica"
+  schedule: "0 8 * * MON-FRI"
+  search:
+    sources:
+      - DOU
+    terms:
+      - "atenção básica"
+      - "saúde da família"
+      - "vigilância sanitária"
+      - "vigilância epidemiológica"
+      - "ministério da saúde"
+      - "SUS"
+      - "RENAME"
+      - "protocolo clínico"
+      - "assistência farmacêutica"
+      - "regulação em saúde"
+      - "APS"
+    dou_sections:
+      - SECAO_1
+      - SECAO_2
+      - SECAO_3
+    ignore_signature_match: True
+    full_text: False
+  report:
+    notification:
+      - json://api:3001/api/diario/webhook-rodou
+    skip_null: True
