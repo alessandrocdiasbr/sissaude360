@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { esusApi } from '../../services/esusApi';
-import { Download, Plus } from 'lucide-react';
+import { Download } from 'lucide-react';
 
 const PRIORITY_BADGE: Record<string, string> = {
   URGENTE: 'bg-red-900/40 text-red-400 border-red-700',
