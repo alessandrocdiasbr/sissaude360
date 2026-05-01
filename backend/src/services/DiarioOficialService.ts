@@ -229,20 +229,18 @@ export async function fetchALMG(_termos: string[]): Promise<ArtigoInput[]> {
   return artigos;
 }
 
-/** Job principal: apaga não salvos antigos e coleta das fontes ativas */
+/** Job principal: coleta das fontes ativas e apaga não salvos antigos apenas se houve sucesso */
 export async function executarColeta(): Promise<void> {
   const preferencias = await prisma.diarioOficialPreferencia.findMany({ where: { ativo: true } });
-
-  // Apaga artigos não salvos de dias anteriores
-  const dataHoje = today();
-  await prisma.diarioOficialArtigo.deleteMany({
-    where: { salvo: false, dataPublicacao: { lt: dataHoje } },
-  });
 
   if (preferencias.length === 0) {
     console.log('[DiarioOficialService] Nenhuma preferência ativa encontrada.');
     return;
   }
+
+  const dataHoje = today();
+  let totalSalvos = 0;
+  let totalFontesSucesso = 0;
 
   for (const pref of preferencias) {
     let termos: string[] = [];
@@ -266,20 +264,39 @@ export async function executarColeta(): Promise<void> {
         continue;
       }
 
+      console.log(`[DiarioOficialService] ${fonte}: ${artigos.length} artigos retornados para "${pref.titulo}"`);
+
+      if (artigos.length === 0) continue;
+
+      totalFontesSucesso++;
+
       for (const artigo of artigos) {
         try {
           const exists = await prisma.diarioOficialArtigo.findFirst({
             where: { titulo: artigo.titulo, fonte: artigo.fonte, dataPublicacao: artigo.dataPublicacao },
           });
-          if (!exists) await prisma.diarioOficialArtigo.create({ data: artigo });
+          if (!exists) {
+            await prisma.diarioOficialArtigo.create({ data: artigo });
+            totalSalvos++;
+          }
         } catch (dbErr: any) {
           console.error('[DiarioOficialService] Erro ao salvar artigo:', dbErr.message);
         }
       }
-
-      console.log(`[DiarioOficialService] ${fonte}: ${artigos.length} artigos coletados para "${pref.titulo}"`);
     }
   }
+
+  // Só limpa artigos antigos não salvos se pelo menos uma fonte retornou dados
+  if (totalFontesSucesso > 0) {
+    const { count } = await prisma.diarioOficialArtigo.deleteMany({
+      where: { salvo: false, dataPublicacao: { lt: dataHoje } },
+    });
+    console.log(`[DiarioOficialService] Limpeza: ${count} artigos antigos não salvos removidos.`);
+  } else {
+    console.warn('[DiarioOficialService] Nenhuma fonte retornou dados — artigos antigos preservados.');
+  }
+
+  console.log(`[DiarioOficialService] Coleta concluída: ${totalSalvos} novos artigos salvos.`);
 }
 
 export default { fetchDOU, fetchDOMG, fetchALMG, executarColeta };

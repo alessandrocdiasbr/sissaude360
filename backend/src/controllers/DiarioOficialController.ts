@@ -279,6 +279,36 @@ class DiarioOficialController {
   }
 
   /**
+   * GET /api/diario/diagnostico
+   * Testa cada fonte e retorna contagens + erros para diagnóstico
+   */
+  async diagnostico(_req: Request, res: Response) {
+    const termosTeste = ['saúde', 'sus'];
+    const resultado: Record<string, { artigos: number; erro?: string }> = {};
+
+    for (const [nome, fn] of [
+      ['DOU', () => fetchDOU(termosTeste)],
+      ['DOMG', () => fetchDOMG(termosTeste)],
+      ['ALMG', () => fetchALMG(termosTeste)],
+    ] as [string, () => Promise<any[]>][]) {
+      try {
+        const artigos = await fn();
+        resultado[nome] = { artigos: artigos.length };
+      } catch (err: any) {
+        resultado[nome] = { artigos: 0, erro: err.message };
+      }
+    }
+
+    const totalBanco = await prisma.diarioOficialArtigo.count();
+    const ultimaPublicacao = await prisma.diarioOficialArtigo.findFirst({
+      orderBy: { dataPublicacao: 'desc' },
+      select: { dataPublicacao: true, fonte: true },
+    });
+
+    res.json({ fontes: resultado, totalBanco, ultimaPublicacao });
+  }
+
+  /**
    * DELETE /api/diario/preferencias/:id
    */
   async deletarPreferencia(req: Request, res: Response) {

@@ -13,6 +13,9 @@ router.post('/buscar', (req, res) => diarioOficialController.buscarManual(req, r
 // Disparo manual da coleta
 router.post('/coletar', (req, res) => diarioOficialController.coletar(req, res));
 
+// Diagnóstico
+router.get('/diagnostico', (req, res) => diarioOficialController.diagnostico(req, res));
+
 // Preferências
 router.get('/preferencias', (req, res) => diarioOficialController.listarPreferencias(req, res));
 router.post('/preferencias', (req, res) => diarioOficialController.criarPreferencia(req, res));
