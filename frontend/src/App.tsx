@@ -16,6 +16,7 @@ import EsusReferrals from './pages/esus/EsusReferrals';
 import EsusQueue from './pages/esus/EsusQueue';
 import EsusProduction from './pages/esus/EsusProduction';
 import EsusIndicators from './pages/esus/EsusIndicators';
+import Configuracoes from './pages/Configuracoes';
 import Login from './pages/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -175,7 +176,8 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         <NavItem to="/esus/indicators"  icon={<ClipboardList size={17} />} label="Indicadores SB360"  active={p === '/esus/indicators'}  color="amber" />
 
         <SectionLabel>Sistema</SectionLabel>
-        <NavItem to="#" icon={<Settings size={17} />} label="Configurações" color="indigo" />
+        <NavItem to="/configuracoes" icon={<Settings size={17} />} label="Configurações"
+          active={location.pathname === '/configuracoes'} color="indigo" />
       </nav>
 
       {/* User card */}
@@ -275,6 +277,7 @@ function AppContent() {
               <Route path="/esus/queue"                      element={<EsusQueue />} />
               <Route path="/esus/production"                 element={<EsusProduction />} />
               <Route path="/esus/indicators"                 element={<EsusIndicators />} />
+              <Route path="/configuracoes"                   element={<Configuracoes />} />
             </Route>
           </Routes>
         </main>

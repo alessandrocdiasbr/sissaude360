@@ -5,6 +5,7 @@ import { listUnidades, createUnidade, updateUnidade, deleteUnidade } from '../co
 import { listItens, createItem, updateItem } from '../controllers/ItemController';
 import { getEstoque, movimentarEstoque, getItensCriticos, getMovimentacoesMes } from '../controllers/EstoqueController';
 import { listServidores, createServidor, updateServidor, deleteServidor } from '../controllers/ServidorController';
+import { listUsers, createUser, updateUser, deleteUser, resetPassword } from '../controllers/UserController';
 import fnsRoutes from '../modules/fns/fns.routes';
 import { authenticateToken } from '../middlewares/auth';
 import filaRoutes from './filaRoutes';
@@ -47,6 +48,13 @@ router.delete('/servidores/:id', deleteServidor);
 router.get('/indicadores', listIndicadores);
 router.get('/dashboard', getDashboardData);
 router.post('/producao', createProducao);
+
+// Usuários (Configurações)
+router.get('/usuarios', listUsers);
+router.post('/usuarios', createUser);
+router.put('/usuarios/:id', updateUser);
+router.delete('/usuarios/:id', deleteUser);
+router.patch('/usuarios/:id/reset-senha', resetPassword);
 
 // Módulos
 router.use('/fns', fnsRoutes);
