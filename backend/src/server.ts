@@ -6,6 +6,7 @@ import cors from 'cors';
 import { apiRoutes } from './routes/api';
 import { startFNSJob } from './jobs/syncFNS';
 import { startDiarioOficialJob } from './jobs/diarioOficialJob';
+import { startEsusSyncJobs } from './jobs/esusSync.job';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -50,4 +51,5 @@ app.listen(PORT, () => {
   // Iniciar Jobs Agendados
   startFNSJob();
   startDiarioOficialJob();
+  startEsusSyncJobs();
 });

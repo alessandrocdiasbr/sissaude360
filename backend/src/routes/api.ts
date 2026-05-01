@@ -11,6 +11,7 @@ import filaRoutes from './filaRoutes';
 import planejamentoRoutes from './planejamentoRoutes';
 import apsRoutes from './apsRoutes';
 import diarioOficialRoutes from './diarioOficialRoutes';
+import esusRoutes from './esus.routes';
 
 const router = Router();
 router.use(express.json());
@@ -53,6 +54,7 @@ router.use('/fila', filaRoutes);
 router.use('/planejamento', planejamentoRoutes);
 router.use('/aps', apsRoutes);
 router.use('/diario', diarioOficialRoutes);
+router.use('/esus', esusRoutes);
 
 export { router as apiRoutes };
 

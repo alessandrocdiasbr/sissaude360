@@ -10,10 +10,16 @@ import Administracao from './pages/Administracao';
 import Planejamento from './pages/Planejamento';
 import Almoxarifado from './pages/Almoxarifado';
 import DiarioOficialMonitor from './pages/DiarioOficialMonitor';
+import EsusDashboard from './pages/esus/EsusDashboard';
+import EsusPatients from './pages/esus/EsusPatients';
+import EsusReferrals from './pages/esus/EsusReferrals';
+import EsusQueue from './pages/esus/EsusQueue';
+import EsusProduction from './pages/esus/EsusProduction';
+import EsusIndicators from './pages/esus/EsusIndicators';
 import Login from './pages/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { LayoutDashboard, FileUp, Settings, LogOut, Activity, Wallet, Package, Users, List, ClipboardList, User } from 'lucide-react';
+import { LayoutDashboard, FileUp, Settings, LogOut, Activity, Wallet, Package, Users, List, ClipboardList, User, HeartPulse } from 'lucide-react';
 
 function AppContent() {
   const location = useLocation();
@@ -86,6 +92,44 @@ function AppContent() {
               active={location.pathname.startsWith('/admin-planejamento')}
             />
 
+            <div className="pt-6 pb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 px-3">e-SUS PEC</div>
+            <NavItem
+              to="/esus"
+              icon={<HeartPulse size={20} />}
+              label="e-SUS Dashboard"
+              active={location.pathname === '/esus'}
+            />
+            <NavItem
+              to="/esus/patients"
+              icon={<Users size={20} />}
+              label="Pacientes"
+              active={location.pathname === '/esus/patients'}
+            />
+            <NavItem
+              to="/esus/referrals"
+              icon={<FileUp size={20} />}
+              label="Encaminhamentos"
+              active={location.pathname === '/esus/referrals'}
+            />
+            <NavItem
+              to="/esus/queue"
+              icon={<List size={20} />}
+              label="Fila de Regulação"
+              active={location.pathname === '/esus/queue'}
+            />
+            <NavItem
+              to="/esus/production"
+              icon={<Activity size={20} />}
+              label="Produção"
+              active={location.pathname === '/esus/production'}
+            />
+            <NavItem
+              to="/esus/indicators"
+              icon={<ClipboardList size={20} />}
+              label="Indicadores SB360"
+              active={location.pathname === '/esus/indicators'}
+            />
+
             <div className="pt-6 pb-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 px-3">Sistema</div>
             <NavItem to="#" icon={<FileUp size={20} />} label="Importar Dados" />
             <NavItem to="#" icon={<Settings size={20} />} label="Configurações" />
@@ -140,6 +184,12 @@ function AppContent() {
               <Route path="/admin-planejamento/admin" element={<Administracao />} />
               <Route path="/admin-planejamento/planejamento" element={<Planejamento />} />
               <Route path="/admin-planejamento/diario" element={<DiarioOficialMonitor />} />
+              <Route path="/esus" element={<EsusDashboard />} />
+              <Route path="/esus/patients" element={<EsusPatients />} />
+              <Route path="/esus/referrals" element={<EsusReferrals />} />
+              <Route path="/esus/queue" element={<EsusQueue />} />
+              <Route path="/esus/production" element={<EsusProduction />} />
+              <Route path="/esus/indicators" element={<EsusIndicators />} />
             </Route>
           </Routes>
         </div>

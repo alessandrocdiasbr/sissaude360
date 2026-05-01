@@ -345,3 +345,81 @@ model DiarioOficialPreferencia {
 
   @@map("diario_oficial_preferencias")
 }
+
+// ─── Módulo e-SUS PEC Analytics ────────────────────────────────
+
+model EsusQueueItem {
+  id              String          @id @default(uuid())
+  patientCns      String          @db.VarChar(15)
+  patientName     String          @db.VarChar(255)
+  type            EsusQueueType
+  description     String
+  specialty       String?         @db.VarChar(100)
+  cid10           String?         @db.VarChar(10)
+  ciap2           String?         @db.VarChar(10)
+  priority        EsusPriority    @default(MEDIA)
+  status          EsusQueueStatus @default(AGUARDANDO)
+  sourceEsusId    String?         @db.VarChar(100)
+  requestedByCns  String?         @db.VarChar(15)
+  requestedAt     DateTime
+  scheduledAt     DateTime?
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  auditLogs       EsusQueueAuditLog[]
+
+  @@index([patientCns])
+  @@index([status])
+  @@index([type])
+  @@index([priority])
+  @@index([sourceEsusId])
+  @@map("esus_queue_items")
+}
+
+model EsusQueueAuditLog {
+  id          String        @id @default(uuid())
+  queueItemId String
+  action      String        @db.VarChar(50)
+  oldStatus   String?       @db.VarChar(50)
+  newStatus   String?       @db.VarChar(50)
+  performedBy String        @db.VarChar(100)
+  notes       String?
+  createdAt   DateTime      @default(now())
+
+  queueItem   EsusQueueItem @relation(fields: [queueItemId], references: [id])
+
+  @@map("esus_queue_audit_logs")
+}
+
+model EsusSyncLog {
+  id            String    @id @default(uuid())
+  syncType      String    @db.VarChar(100)
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  recordsFound  Int       @default(0)
+  status        String    @db.VarChar(20)
+  errorMessage  String?
+
+  @@map("esus_sync_logs")
+}
+
+enum EsusQueueType {
+  PROCEDURE
+  REFERRAL
+  EXAM
+}
+
+enum EsusPriority {
+  URGENTE
+  ALTA
+  MEDIA
+  BAIXA
+}
+
+enum EsusQueueStatus {
+  AGUARDANDO
+  AGENDADO
+  REALIZADO
+  CANCELADO
+}
